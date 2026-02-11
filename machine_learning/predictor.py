@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 import warnings
+from .data_loader import get_team_latest_stats
 
 warnings.filterwarnings('ignore')
 
@@ -31,7 +32,6 @@ def predict_game_gp(home_team_name, away_team_name, gp_model, games_df, team_dat
     Returns:
     - Dict with prediction, uncertainty, win probability, confidence
     """
-    from data_loader import get_team_latest_stats
     
     # Get team IDs
     team_names_inv = {v: k for k, v in team_data['names'].items()}

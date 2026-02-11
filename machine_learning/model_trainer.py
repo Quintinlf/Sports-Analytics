@@ -69,7 +69,7 @@ class GaussianProcessPredictor:
         
         self.model = GaussianProcessRegressor(
             kernel=kernel,
-            n_restarts_optimizer=10,
+            n_restarts_optimizer=3,  # ⚡ OPTIMIZED: Reduced from 10 to 3 (3x faster)
             alpha=1e-10,  # Regularization
             random_state=random_state,
             normalize_y=True
