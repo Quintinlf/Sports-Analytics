@@ -1,0 +1,914 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>NBA Predictions - Week 14 (Jan 21-25, 2026)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            font-size: 36px;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 18px;
+            margin-bottom: 30px;
+        }
+        .game-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 5px solid #3498db;
+            transition: transform 0.2s;
+        }
+        .game-card:hover {
+            transform: translateX(5px);
+        }
+        .game-header {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+        .prediction-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            padding: 8px;
+            background: white;
+            border-radius: 5px;
+        }
+        .label {
+            font-weight: 600;
+            color: #34495e;
+        }
+        .value {
+            color: #2c3e50;
+        }
+        .confidence-high {
+            background: #2ecc71;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+        .confidence-medium {
+            background: #f39c12;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+        .confidence-low {
+            background: #e74c3c;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+        .result-correct {
+            background: #d4edda;
+            border-left-color: #28a745 !important;
+        }
+        .result-incorrect {
+            background: #f8d7da;
+            border-left-color: #dc3545 !important;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 32px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .metric-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #ecf0f1;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏀 NBA Game Predictions</h1>
+        <div class="subtitle">Week 14 (Jan 21-25, 2026) | Generated: 2026-02-07 08:42 PM</div>
+
+        <div class="game-card ">
+            <div class="game-header">Cleveland Cavaliers (HOME) vs Charlotte Hornets (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">+18.3 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Cleveland Cavaliers by 18.3 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">93.9%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Boston Celtics (HOME) vs Indiana Pacers (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-3.3 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Indiana Pacers by 3.3 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">37.8%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">New York Knicks (HOME) vs Brooklyn Nets (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">+7.7 points (±12.2)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">New York Knicks by 7.7 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">75.9%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Memphis Grizzlies (HOME) vs Atlanta Hawks (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-5.8 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Atlanta Hawks by 5.8 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">29.6%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">New Orleans Pelicans (HOME) vs Detroit Pistons (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-8.1 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Detroit Pistons by 8.1 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">23.0%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Milwaukee Bucks (HOME) vs Oklahoma City Thunder (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-6.3 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Oklahoma City Thunder by 6.3 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">28.0%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Sacramento Kings (HOME) vs Toronto Raptors (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-1.3 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Toronto Raptors by 1.3 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">45.0%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Orlando Magic (HOME) vs Charlotte Hornets (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">+20.1 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Orlando Magic by 20.1 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">95.3%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Philadelphia 76ers (HOME) vs Houston Rockets (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-6.3 points (±12.2)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Houston Rockets by 6.3 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">28.1%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Washington Wizards (HOME) vs Denver Nuggets (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-14.5 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Denver Nuggets by 14.5 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">10.1%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Dallas Mavericks (HOME) vs Golden State Warriors (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-8.8 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Golden State Warriors by 8.8 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">21.0%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Minnesota Timberwolves (HOME) vs Chicago Bulls (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-2.6 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Chicago Bulls by 2.6 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">40.2%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Utah Jazz (HOME) vs San Antonio Spurs (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-1.1 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">San Antonio Spurs by 1.1 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">45.9%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Los Angeles Clippers (HOME) vs Los Angeles Lakers (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">+6.6 points (±12.4)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Los Angeles Clippers by 6.6 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">73.0%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Portland Trail Blazers (HOME) vs Miami Heat (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-17.7 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Miami Heat by 17.7 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">6.6%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Detroit Pistons (HOME) vs Houston Rockets (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-2.8 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Houston Rockets by 2.8 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">39.5%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Atlanta Hawks (HOME) vs Phoenix Suns (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">+16.0 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Atlanta Hawks by 16.0 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">91.7%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Brooklyn Nets (HOME) vs Boston Celtics (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-12.1 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Boston Celtics by 12.1 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">14.0%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Cleveland Cavaliers (HOME) vs Sacramento Kings (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-2.4 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Sacramento Kings by 2.4 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">41.2%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Memphis Grizzlies (HOME) vs New Orleans Pelicans (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">+10.0 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Memphis Grizzlies by 10.0 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">81.9%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Oklahoma City Thunder (HOME) vs Indiana Pacers (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">+5.0 points (±12.4)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Oklahoma City Thunder by 5.0 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">68.0%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Milwaukee Bucks (HOME) vs Denver Nuggets (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">+6.8 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Milwaukee Bucks by 6.8 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">73.6%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Portland Trail Blazers (HOME) vs Toronto Raptors (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-7.5 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Toronto Raptors by 7.5 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">24.6%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Philadelphia 76ers (HOME) vs New York Knicks (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-3.8 points (±12.2)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">New York Knicks by 3.8 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">36.2%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Minnesota Timberwolves (HOME) vs Golden State Warriors (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">+3.9 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Minnesota Timberwolves by 3.9 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">64.1%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Charlotte Hornets (HOME) vs Washington Wizards (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-1.1 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Washington Wizards by 1.1 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">45.8%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Orlando Magic (HOME) vs Cleveland Cavaliers (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-0.5 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Cleveland Cavaliers by 0.5 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">48.3%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Chicago Bulls (HOME) vs Boston Celtics (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">+3.7 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Chicago Bulls by 3.7 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">63.7%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Dallas Mavericks (HOME) vs Los Angeles Lakers (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-13.1 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Los Angeles Lakers by 13.1 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">12.3%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Utah Jazz (HOME) vs Miami Heat (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-16.5 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Miami Heat by 16.5 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">7.8%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Detroit Pistons (HOME) vs Sacramento Kings (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-6.7 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Sacramento Kings by 6.7 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">26.8%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Memphis Grizzlies (HOME) vs Denver Nuggets (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">+1.6 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Memphis Grizzlies by 1.6 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">56.0%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Milwaukee Bucks (HOME) vs Dallas Mavericks (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">+23.0 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Milwaukee Bucks by 23.0 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">96.9%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Oklahoma City Thunder (HOME) vs Toronto Raptors (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">+4.7 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Oklahoma City Thunder by 4.7 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">67.0%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">San Antonio Spurs (HOME) vs New Orleans Pelicans (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">+3.9 points (±12.2)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">San Antonio Spurs by 3.9 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">64.1%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Phoenix Suns (HOME) vs Miami Heat (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">-21.6 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Miami Heat by 21.6 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">3.8%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="game-card ">
+            <div class="game-header">Los Angeles Clippers (HOME) vs Brooklyn Nets (AWAY)</div>
+            <div class="prediction-row">
+                <span class="label">Predicted Spread:</span>
+                <span class="value">+21.3 points (±12.3)</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Favorite:</span>
+                <span class="value">Los Angeles Clippers by 21.3 points</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Win Probability:</span>
+                <span class="value">96.1%</span>
+            </div>
+            <div class="prediction-row">
+                <span class="label">Confidence:</span>
+                <span class="value"><span class="confidence-low">LOW</span></span>
+            </div>
+
+        </div>
+
+        <div class="footer">
+            <p><strong>Prediction Model:</strong> Gaussian Process (Matérn Kernel) + Bayesian MCMC EPAA</p>
+            <p>Confidence levels: HIGH (>70% win prob, low uncertainty) | MEDIUM (60-70%) | LOW (<60%)</p>
+            <p>Generated by NBA Prediction System | © 2026</p>
+        </div>
+    </div>
+</body>
+</html>

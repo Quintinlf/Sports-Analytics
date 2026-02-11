@@ -1,0 +1,17 @@
+{
+  "total_predictions": 181,
+  "completed_predictions": 0,
+  "pending_predictions": 181,
+  "overall_performance": {},
+  "recent_performance": {
+    "n_predictions": 0,
+    "accuracy": 0.0,
+    "r2": 0.0,
+    "rmse": 0.0,
+    "mae": 0.0,
+    "ci_coverage": 0.0,
+    "win_prediction_accuracy": 0.0
+  },
+  "recommended_epaa_weight": 0.5,
+  "generated_at": "2026-02-07T20:52:04.877757"
+}

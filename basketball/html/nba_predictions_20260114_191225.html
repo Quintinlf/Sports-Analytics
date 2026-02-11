@@ -1,0 +1,461 @@
+
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>NBA Game Predictions - January 14, 2026</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                padding: 20px;
+            }
+            
+            .container {
+                max-width: 1200px;
+                margin: 0 auto;
+                background: white;
+                border-radius: 15px;
+                box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+                overflow: hidden;
+            }
+            
+            .header {
+                background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                color: white;
+                padding: 40px;
+                text-align: center;
+            }
+            
+            .header h1 {
+                font-size: 2.5em;
+                margin-bottom: 10px;
+                text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            }
+            
+            .header .subtitle {
+                font-size: 1.2em;
+                opacity: 0.9;
+            }
+            
+            .header .timestamp {
+                margin-top: 15px;
+                font-size: 0.9em;
+                opacity: 0.8;
+            }
+            
+            .content {
+                padding: 40px;
+            }
+            
+            .game-card {
+                background: #f8f9fa;
+                border-radius: 10px;
+                padding: 30px;
+                margin-bottom: 30px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                border-left: 5px solid #667eea;
+            }
+            
+            .game-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 20px;
+                padding-bottom: 15px;
+                border-bottom: 2px solid #e9ecef;
+            }
+            
+            .game-number {
+                font-size: 1.5em;
+                font-weight: bold;
+                color: #667eea;
+            }
+            
+            .game-time {
+                text-align: right;
+                color: #666;
+            }
+            
+            .matchup {
+                text-align: center;
+                margin: 25px 0;
+            }
+            
+            .team {
+                font-size: 1.8em;
+                font-weight: bold;
+                color: #1e3c72;
+                margin: 10px 0;
+            }
+            
+            .vs {
+                font-size: 1.2em;
+                color: #999;
+                margin: 10px 0;
+            }
+            
+            .prediction-box {
+                background: white;
+                border-radius: 8px;
+                padding: 20px;
+                margin: 20px 0;
+                border: 2px solid #e9ecef;
+            }
+            
+            .prediction-title {
+                font-size: 1.3em;
+                font-weight: bold;
+                color: #1e3c72;
+                margin-bottom: 15px;
+                display: flex;
+                align-items: center;
+            }
+            
+            .prediction-title::before {
+                content: '🎯';
+                margin-right: 10px;
+                font-size: 1.2em;
+            }
+            
+            .winner {
+                font-size: 1.5em;
+                color: #28a745;
+                font-weight: bold;
+                margin: 10px 0;
+            }
+            
+            .spread {
+                font-size: 1.2em;
+                color: #666;
+                margin: 5px 0;
+            }
+            
+            .confidence {
+                display: inline-block;
+                padding: 8px 16px;
+                border-radius: 20px;
+                font-weight: bold;
+                margin-top: 10px;
+            }
+            
+            .confidence.high {
+                background: #d4edda;
+                color: #155724;
+            }
+            
+            .confidence.medium {
+                background: #fff3cd;
+                color: #856404;
+            }
+            
+            .confidence.low {
+                background: #f8d7da;
+                color: #721c24;
+            }
+            
+            .mcmc-section {
+                background: #e8f4f8;
+                border-radius: 8px;
+                padding: 20px;
+                margin: 20px 0;
+                border-left: 4px solid #17a2b8;
+            }
+            
+            .mcmc-title {
+                font-size: 1.2em;
+                font-weight: bold;
+                color: #0c5460;
+                margin-bottom: 15px;
+            }
+            
+            .mcmc-title::before {
+                content: '🔬';
+                margin-right: 10px;
+            }
+            
+            .team-mcmc {
+                background: white;
+                border-radius: 6px;
+                padding: 15px;
+                margin: 10px 0;
+            }
+            
+            .epaa-badge {
+                display: inline-block;
+                padding: 5px 12px;
+                border-radius: 15px;
+                font-weight: bold;
+                font-size: 0.9em;
+                margin: 5px 5px 5px 0;
+            }
+            
+            .epaa-positive {
+                background: #d4edda;
+                color: #155724;
+            }
+            
+            .epaa-negative {
+                background: #f8d7da;
+                color: #721c24;
+            }
+            
+            .epaa-neutral {
+                background: #e2e3e5;
+                color: #383d41;
+            }
+            
+            .factors-section {
+                margin: 25px 0;
+            }
+            
+            .factors-title {
+                font-size: 1.2em;
+                font-weight: bold;
+                color: #1e3c72;
+                margin-bottom: 15px;
+            }
+            
+            .factors-title::before {
+                content: '🔍';
+                margin-right: 10px;
+            }
+            
+            .factor-item {
+                background: white;
+                border-radius: 6px;
+                padding: 15px;
+                margin: 10px 0;
+                border-left: 3px solid #6c757d;
+            }
+            
+            .factor-item.favors-home {
+                border-left-color: #28a745;
+                background: #f1f9f3;
+            }
+            
+            .factor-item.favors-away {
+                border-left-color: #dc3545;
+                background: #f9f1f2;
+            }
+            
+            .factor-rank {
+                font-weight: bold;
+                color: #667eea;
+                margin-right: 10px;
+            }
+            
+            .factor-stat {
+                font-size: 1.1em;
+                color: #333;
+                margin: 5px 0;
+            }
+            
+            .factor-impact {
+                color: #666;
+                font-size: 0.95em;
+                margin-top: 5px;
+            }
+            
+            .logic-explanation {
+                background: #fff9e6;
+                border-radius: 8px;
+                padding: 20px;
+                margin: 20px 0;
+                border-left: 4px solid #ffc107;
+            }
+            
+            .logic-title {
+                font-size: 1.2em;
+                font-weight: bold;
+                color: #856404;
+                margin-bottom: 15px;
+            }
+            
+            .logic-title::before {
+                content: '💡';
+                margin-right: 10px;
+            }
+            
+            .logic-item {
+                margin: 15px 0;
+                padding: 12px;
+                background: white;
+                border-radius: 6px;
+            }
+            
+            .logic-metric {
+                font-weight: bold;
+                color: #1e3c72;
+                margin-bottom: 5px;
+            }
+            
+            .logic-text {
+                color: #555;
+                line-height: 1.8;
+            }
+            
+            .footer {
+                background: #f8f9fa;
+                padding: 20px;
+                text-align: center;
+                color: #666;
+                font-size: 0.9em;
+            }
+            
+            @media print {
+                body {
+                    background: white;
+                    padding: 0;
+                }
+                
+                .container {
+                    box-shadow: none;
+                }
+                
+                .game-card {
+                    page-break-inside: avoid;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🏀 NBA Game Predictions - January 14, 2026</h1>
+                <div class="subtitle">Advanced Bayesian Basketball Predictions</div>
+                <div class="timestamp">Generated: January 14, 2026 at 07:12 PM</div>
+            </div>
+            
+            <div class="content">
+                
+                <div class="game-card">
+                    <div class="game-header">
+                        <div class="game-number">Game 1 of 1</div>
+                        <div class="game-time">
+                            January 14, 2026<br>
+                            07:30 PM PST
+                        </div>
+                    </div>
+                    
+                    <div class="matchup">
+                        <div class="team">🏠 Los Angeles Clippers</div>
+                        <div class="vs">vs</div>
+                        <div class="team">✈️ Washington Wizards</div>
+                    </div>
+                    
+                    <div class="prediction-box">
+                        <div class="prediction-title">Prediction</div>
+                        <div class="winner">Los Angeles Clippers to win</div>
+                        <div class="spread">Predicted Spread: 24.0 points</div>
+                        <div class="spread">Win Probability: 97.3%</div>
+                        <span class="confidence high">
+                            HIGH CONFIDENCE
+                        </span>
+                    </div>
+                    
+                    
+                    
+                    <div class="factors-section">
+                        <div class="factors-title">Top Contributing Factors</div>
+                        
+                        <div class="factor-item favors-home">
+                            <span class="factor-rank">#1</span>
+                            <div class="factor-stat">
+                                <strong>Los Angeles Clippers</strong> - field goal percentage
+                            </div>
+                            <div class="factor-impact">
+                                Favors HOME team (+10.28 points)
+                            </div>
+                        </div>
+                        
+                        <div class="factor-item favors-home">
+                            <span class="factor-rank">#2</span>
+                            <div class="factor-stat">
+                                <strong>Washington Wizards</strong> - field goal percentage
+                            </div>
+                            <div class="factor-impact">
+                                Favors HOME team (+4.88 points)
+                            </div>
+                        </div>
+                        
+                        <div class="factor-item favors-home">
+                            <span class="factor-rank">#3</span>
+                            <div class="factor-stat">
+                                <strong>Washington Wizards</strong> - steals per game
+                            </div>
+                            <div class="factor-impact">
+                                Favors HOME team (+3.13 points)
+                            </div>
+                        </div>
+                        
+                        <div class="factor-item favors-home">
+                            <span class="factor-rank">#4</span>
+                            <div class="factor-stat">
+                                <strong>Los Angeles Clippers</strong> - 3-point percentage
+                            </div>
+                            <div class="factor-impact">
+                                Favors HOME team (+3.04 points)
+                            </div>
+                        </div>
+                        
+                        <div class="factor-item favors-home">
+                            <span class="factor-rank">#5</span>
+                            <div class="factor-stat">
+                                <strong>Washington Wizards</strong> - 3-point percentage
+                            </div>
+                            <div class="factor-impact">
+                                Favors HOME team (+2.81 points)
+                            </div>
+                        </div>
+                        
+                    </div>
+                    
+                    <div class="logic-explanation">
+                        <div class="logic-title">Prediction Logic Explained</div>
+                        
+                        <div class="logic-item">
+                            <div class="logic-metric">Base Model Analysis</div>
+                            <div class="logic-text">The base statistical model predicts a significant advantage for Los Angeles Clippers 
+    with a spread of 24.0 points.</div>
+                        </div>
+                        
+                        
+                        
+                        <div class="logic-item">
+                            <div class="logic-metric">Final Conclusion</div>
+                            <div class="logic-text">FINAL PREDICTION: Los Angeles Clippers is favored to win by 24.0 points.
+    
+    Confidence Level: HIGH (97.3%)
+    
+    What this means:
+    - If delta > 10: The favored team has a significant statistical advantage across multiple metrics
+    - If delta > 5: The favored team has a moderate advantage, but the game could be competitive
+    - If delta < 5: This is expected to be a close game with relatively even matchup
+    
+    The model combines traditional box score statistics (points, rebounds, assists, etc.) with 
+    advanced Bayesian analysis of shooting patterns to provide the most accurate prediction possible.</div>
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+            
+            <div class="footer">
+                <p><strong>Methodology:</strong> Predictions combine Bayesian Ridge Regression with Hierarchical MCMC modeling</p>
+                <p>Data sources: NBA API | Model: Bayesian Statistical Framework with MCMC sampling</p>
+                <p>© 2026 NBA Prediction System | For entertainment purposes only</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    
