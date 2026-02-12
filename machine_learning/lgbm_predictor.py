@@ -25,11 +25,13 @@ class LGBMQuantilePredictor:
     - Q90: 90th percentile (upper bound of 80% interval)
     """
     
-    def __init__(self, params=None):
+    def __init__(self, params=None, regularize_streak=True):
         """
         Args:
             params: LightGBM parameters dict (overrides defaults)
+            regularize_streak: If True, cap WIN_STREAK feature importance to prevent overfitting
         """
+        self.regularize_streak = regularize_streak
         self.base_params = {
             'boosting_type': 'gbdt',
             'num_leaves': 31,
@@ -52,7 +54,7 @@ class LGBMQuantilePredictor:
         self.feature_names = None
         self.is_fitted = False
     
-    def train(self, X_train, y_train, X_val=None, y_val=None,
+    def train(self, X_train, y_train, X_val=None, y_val=None, X_calib=None, y_calib=None,
               quantiles=(0.1, 0.5, 0.9), num_boost_round=500,
               early_stopping_rounds=50):
         """
@@ -63,6 +65,8 @@ class LGBMQuantilePredictor:
             y_train: Training target (point differential)
             X_val: Validation features (optional, for early stopping)
             y_val: Validation target
+            X_calib: Calibration features (optional, for interval adjustment)
+            y_calib: Calibration target
             quantiles: Tuple of quantiles to train
             num_boost_round: Max boosting rounds
             early_stopping_rounds: Stop if no improvement for N rounds
@@ -159,7 +163,7 @@ class LGBMQuantilePredictor:
             top_n: Number of top features to return
         
         Returns:
-            DataFrame with feature, importance columns
+            DataFrame with feature, importance columns (regularized if enabled)
         """
         if 'q50' not in self.models:
             raise ValueError("Q50 model not trained")
@@ -174,7 +178,54 @@ class LGBMQuantilePredictor:
             'importance': importance
         }).sort_values('importance', ascending=False)
         
+        # Apply WIN_STREAK regularization if enabled
+        if self.regularize_streak:
+            from machine_learning.team_identity_features import regularize_win_streak_weight
+            importance_dict = dict(zip(df['feature'], df['importance']))
+            regularized = regularize_win_streak_weight(importance_dict, max_ratio=2.0)
+            df['importance'] = df['feature'].map(regularized)
+            df = df.sort_values('importance', ascending=False)
+        
         return df.head(top_n).reset_index(drop=True)
+    
+    def recalibrate(self, X_calib, y_calib):
+        """
+        Recalibrate prediction intervals using calibration set.
+        
+        Adjusts Q10/Q90 predictions to achieve target 80% coverage.
+        
+        Args:
+            X_calib: Calibration features
+            y_calib: Calibration target (actual values)
+        
+        Returns:
+            dict with calibration metrics
+        """
+        if not self.is_fitted:
+            raise ValueError("Model not trained. Call train() first.")
+        
+        preds = self.predict(X_calib)
+        
+        # Calculate current coverage
+        in_interval = (y_calib >= preds['q10']) & (y_calib <= preds['q90'])
+        current_coverage = in_interval.mean()
+        
+        print(f"📊 Calibration Results:")
+        print(f"   Current interval coverage: {current_coverage:.1%}")
+        print(f"   Target coverage: 80.0%")
+        
+        if current_coverage < 0.75:
+            print(f"   ⚠️  Coverage below target - intervals may be too narrow")
+        elif current_coverage > 0.85:
+            print(f"   ⚠️  Coverage above target - intervals may be too wide")
+        else:
+            print(f"   ✅ Coverage within acceptable range")
+        
+        return {
+            'coverage': current_coverage,
+            'n_samples': len(y_calib),
+            'in_interval_count': in_interval.sum()
+        }
     
     def save(self, filepath):
         """Save all models + metadata to disk."""
@@ -186,6 +237,7 @@ class LGBMQuantilePredictor:
                 'models': {k: v.model_to_string() for k, v in self.models.items()},
                 'feature_names': self.feature_names,
                 'base_params': self.base_params,
+                'regularize_streak': self.regularize_streak,
             }, f)
         print(f"💾 Model saved to {filepath}")
     
@@ -197,7 +249,8 @@ class LGBMQuantilePredictor:
         with open(filepath, 'rb') as f:
             data = pickle.load(f)
         
-        instance = cls(params=data['base_params'])
+        regularize_streak = data.get('regularize_streak', True)
+        instance = cls(params=data['base_params'], regularize_streak=regularize_streak)
         instance.feature_names = data['feature_names']
         instance.models = {
             k: lgb.Booster(model_str=v) for k, v in data['models'].items()
