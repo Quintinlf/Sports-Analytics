@@ -13,7 +13,10 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 import warnings
-from .data_loader import get_team_latest_stats
+try:
+    from .data_loader import get_team_latest_stats
+except ImportError:
+    from data_loader import get_team_latest_stats
 
 warnings.filterwarnings('ignore')
 

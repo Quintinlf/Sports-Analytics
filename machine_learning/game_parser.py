@@ -45,6 +45,10 @@ def parse_game_csv_text(csv_text: str) -> pd.DataFrame:
     if len(pts_columns) >= 2:
         df['away_score'] = df[pts_columns[0]]
         df['home_score'] = df[pts_columns[1]]
+    else:
+        # Create empty score columns if PTS columns not found
+        df['away_score'] = None
+        df['home_score'] = None
     
     # Parse date
     df['game_date'] = pd.to_datetime(df['date'] + ' 2026', format='%a %b %d %Y', errors='coerce')
@@ -67,10 +71,9 @@ def parse_game_csv_text(csv_text: str) -> pd.DataFrame:
     
     # Determine actual winner
     df['actual_winner'] = df.apply(
-        lambda row: row['home_team'] if row['actual_spread'] > 0 
-        else row['away_team'] if row['actual_spread'] < 0 
-        else 'TIE'
-        if pd.notna(row['actual_spread'])
+        lambda row: row['home_team'] if pd.notna(row['actual_spread']) and row['actual_spread'] > 0 
+        else row['away_team'] if pd.notna(row['actual_spread']) and row['actual_spread'] < 0 
+        else 'TIE' if pd.notna(row['actual_spread']) and row['actual_spread'] == 0
         else None,
         axis=1
     )

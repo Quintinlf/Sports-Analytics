@@ -117,7 +117,7 @@ class IterativePredictor:
         if self.verbose:
             print("📋 Initializing prediction validator...")
         self.validator = PredictionValidator(
-            log_path='basketball/predictions_log.json'
+            log_file='basketball/predictions_log.json'
         )
         
         # Load or train GP model

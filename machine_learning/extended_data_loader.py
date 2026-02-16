@@ -200,10 +200,13 @@ def prepare_training_data(
     # Extract features and target
     target = matchup_df['POINT_DIFF'].values
     
-    # Feature columns (all HOME_* and AWAY_* columns except identifiers)
+    # Feature columns (all HOME_* and AWAY_* columns except identifiers and names)
     feature_cols = [col for col in matchup_df.columns 
                    if (col.startswith('HOME_') or col.startswith('AWAY_'))
-                   and col not in ['HOME_TEAM_ID', 'AWAY_TEAM_ID']]
+                   and col not in ['HOME_TEAM_ID', 'AWAY_TEAM_ID', 
+                                   'HOME_TEAM_NAME', 'AWAY_TEAM_NAME',
+                                   'HOME_TEAM', 'AWAY_TEAM',
+                                   'HOME_PTS', 'AWAY_PTS', 'HOME_WIN']]
     
     features = matchup_df[feature_cols]
     
