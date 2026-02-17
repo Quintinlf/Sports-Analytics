@@ -126,14 +126,12 @@ class IterativePredictor:
         
         if not force_retrain:
             try:
-                # Try to load existing model
-                import pickle
+                # Try to load latest existing model
                 import glob
-                model_files = glob.glob('machine_learning/models/gp_model_*.pkl')
+                model_files = glob.glob('machine_learning/models/gp_predictor_*.pkl')
                 if model_files:
                     latest_model = max(model_files, key=os.path.getctime)
-                    with open(latest_model, 'rb') as f:
-                        self.gp_model = pickle.load(f)
+                    self.gp_model = GaussianProcessPredictor.load(latest_model)
                     if self.verbose:
                         print(f"   ✅ Loaded existing model: {os.path.basename(latest_model)}")
                 else:
@@ -145,24 +143,16 @@ class IterativePredictor:
         
         if force_retrain or self.gp_model is None:
             if self.verbose:
-                print("   🔄 Training new GP model...")
+                print("   🔄 Training new GP model with clean features...")
             
-            # Train GP model
+            # Train GP model (fit() will auto-save)
             self.gp_model = GaussianProcessPredictor(kernel_type='combined')
             X_train = self.matchup_df[self.feature_names].values
             y_train = y
-            self.gp_model.fit(X_train, y_train)
-            
-            # Save model
-            os.makedirs('machine_learning/models', exist_ok=True)
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            model_path = f'machine_learning/models/gp_model_{timestamp}.pkl'
-            import pickle
-            with open(model_path, 'wb') as f:
-                pickle.dump(self.gp_model, f)
+            self.gp_model.fit(X_train, y_train, verbose=self.verbose)
             
             if self.verbose:
-                print(f"   ✅ Trained and saved: {os.path.basename(model_path)}")
+                print(f"   ✅ Model trained and auto-saved")
         
         # Initialize Ensemble model
         if self.verbose:

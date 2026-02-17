@@ -108,12 +108,12 @@ def calculate_rolling_stats(df, window=5):
     df = df.copy()
     df = df.sort_values(['TEAM_ID', 'GAME_DATE'])
     
-    # Basic rolling stats
+    # Basic rolling stats (shifted to exclude current game - prevent leakage)
     rolling_cols = ['PTS', 'FG_PCT', 'FG3_PCT', 'REB', 'AST', 'STL', 'BLK', 'TOV']
     for col in rolling_cols:
         if col in df.columns:
             df[f'{col}_ROLL'] = df.groupby('TEAM_ID')[col].transform(
-                lambda x: x.rolling(window=window, min_periods=1).mean()
+                lambda x: x.shift(1).rolling(window=window, min_periods=1).mean()
             )
     
     # Win Streak - Consecutive wins (positive) or losses (negative)
@@ -128,7 +128,8 @@ def calculate_rolling_stats(df, window=5):
             streak.append(current_streak)
         return pd.Series(streak, index=wl_series.index)
     
-    df['WIN_STREAK'] = df.groupby('TEAM_ID')['WL'].transform(calculate_streak)
+    # Shift WIN_STREAK by 1 to use only prior games (prevent leakage)
+    df['WIN_STREAK'] = df.groupby('TEAM_ID')['WL'].transform(calculate_streak).shift(1).fillna(0)
     
     # Rest Days - Days between games
     df['REST_DAYS'] = df.groupby('TEAM_ID')['GAME_DATE'].diff().dt.days.fillna(2)
@@ -136,9 +137,9 @@ def calculate_rolling_stats(df, window=5):
     # Back-to-Back Indicator
     df['IS_BACK_TO_BACK'] = (df['REST_DAYS'] == 1).astype(int)
     
-    # Team Momentum - Rolling win rate (last 10 games)
+    # Team Momentum - Rolling win rate (last 10 games, shifted to exclude current game)
     df['WIN_RATE_10'] = df.groupby('TEAM_ID')['WL'].transform(
-        lambda x: (x == 'W').rolling(window=10, min_periods=1).mean()
+        lambda x: (x == 'W').shift(1).rolling(window=10, min_periods=1).mean()
     )
     
     return df

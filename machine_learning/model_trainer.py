@@ -107,6 +107,15 @@ class GaussianProcessPredictor:
             print(f"   ✓ Kernel: {self.model.kernel_}")
             print(f"   ✓ Log-marginal-likelihood: {self.model.log_marginal_likelihood(self.model.kernel_.theta):.2f}")
         
+        # Auto-save model after successful fit
+        os.makedirs('machine_learning/models', exist_ok=True)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        model_path = f'machine_learning/models/gp_predictor_{self.kernel_type}_{timestamp}.pkl'
+        self.save(model_path)
+        
+        if verbose:
+            print(f"   ✓ Auto-saved to {os.path.basename(model_path)}")
+        
         return self
     
     def predict(self, X, return_std=True):
@@ -170,9 +179,13 @@ class GaussianProcessPredictor:
                 'scaler': self.scaler,
                 'kernel_type': self.kernel_type,
                 'is_fitted': self.is_fitted,
-                'feature_names': self.feature_names
+                'feature_names': self.feature_names,
+                'saved_at': datetime.now().isoformat()
             }, f)
-        print(f"💾 GP model saved to {filepath}")
+        if os.path.dirname(filepath) != '':
+            print(f"   💾 GP model saved to {os.path.basename(filepath)}")
+        else:
+            print(f"   💾 GP model saved to {filepath}")
     
     @classmethod
     def load(cls, filepath):
@@ -186,7 +199,8 @@ class GaussianProcessPredictor:
         instance.is_fitted = data['is_fitted']
         instance.feature_names = data.get('feature_names')
         
-        print(f"📂 GP model loaded from {filepath}")
+        saved_at = data.get('saved_at', 'Unknown')
+        print(f"   📂 Loaded {os.path.basename(filepath)} (saved: {saved_at})")
         return instance
 
 

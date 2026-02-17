@@ -42,11 +42,11 @@ def calculate_player_rolling_stats(
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
     
-    # Rolling averages (grouped by player)
+    # Rolling averages (grouped by player, shifted to prevent leakage)
     for col in stat_cols:
         if col in df.columns:
             df[f'{col}_ROLL'] = df.groupby('PLAYER_ID')[col].transform(
-                lambda x: x.rolling(window=window, min_periods=1).mean()
+                lambda x: x.shift(1).rolling(window=window, min_periods=1).mean()
             )
         else:
             df[f'{col}_ROLL'] = 0.0
@@ -57,12 +57,12 @@ def calculate_player_rolling_stats(
     df['PTS_PER_FGA'] = df['PTS'] / (df['FGA'] + 1)  # Avoid division by zero
     
     df['PTS_PER_FGA_ROLL'] = df.groupby('PLAYER_ID')['PTS_PER_FGA'].transform(
-        lambda x: x.rolling(window=window, min_periods=1).mean()
+        lambda x: x.shift(1).rolling(window=window, min_periods=1).mean()
     )
     
-    # Rotation stability: Std dev of minutes
+    # Rotation stability: Std dev of minutes (shifted to prevent leakage)
     df['MIN_STD_ROLL'] = df.groupby('PLAYER_ID')['MIN'].transform(
-        lambda x: x.rolling(window=window, min_periods=2).std().fillna(0)
+        lambda x: x.shift(1).rolling(window=window, min_periods=2).std().fillna(0)
     )
     
     # Fill any remaining NaN

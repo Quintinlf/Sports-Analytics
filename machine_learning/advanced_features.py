@@ -73,13 +73,13 @@ def calculate_advanced_rolling_stats(games_df, window=5):
     for col in advanced_cols:
         if col in df.columns:
             df[f'{col}_ROLL'] = df.groupby('TEAM_ID')[col].transform(
-                lambda x: x.rolling(window=window, min_periods=1).mean()
+                lambda x: x.shift(1).rolling(window=window, min_periods=1).mean()
             )
     
-    # PLUS_MINUS rolling (proxy for Net Rating)
+    # PLUS_MINUS rolling (proxy for Net Rating, shifted to prevent leakage)
     if 'PLUS_MINUS' in df.columns:
         df['PLUS_MINUS_ROLL'] = df.groupby('TEAM_ID')['PLUS_MINUS'].transform(
-            lambda x: x.rolling(window=window, min_periods=1).mean()
+            lambda x: x.shift(1).rolling(window=window, min_periods=1).mean()
         )
     
     print(f"   ✅ Added {len(advanced_cols) + 1} advanced rolling features")
