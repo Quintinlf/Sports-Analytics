@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Union, Tuple, Dict, Optional
 
 from machine_learning.player_fetcher import fetch_player_logs_for_team, normalize_team_id
-from machine_learning.player_features import calculate_player_rolling_stats, aggregate_player_stats_by_team
+from feature_selection.player_features import calculate_player_rolling_stats, aggregate_player_stats_by_team
 from machine_learning.player_cache import PlayerDataCache
 
 

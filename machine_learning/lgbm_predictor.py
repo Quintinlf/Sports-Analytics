@@ -180,7 +180,7 @@ class LGBMQuantilePredictor:
         
         # Apply WIN_STREAK regularization if enabled
         if self.regularize_streak:
-            from machine_learning.team_identity_features import regularize_win_streak_weight
+            from feature_selection.team_identity_features import regularize_win_streak_weight
             importance_dict = dict(zip(df['feature'], df['importance']))
             regularized = regularize_win_streak_weight(importance_dict, max_ratio=2.0)
             df['importance'] = df['feature'].map(regularized)

@@ -1,9 +1,0 @@
-game_num,away_team,home_team,time,winner,spread,probability,confidence,confidence_score,methods_agree,actual_winner,correct
-1,Atlanta Hawks,Philadelphia 76ers,7:00p,Philadelphia 76ers,5.48073708866055,0.683130622291908,HIGH,0.5770231909233685,True,,
-2,Indiana Pacers,Washington Wizards,7:00p,Indiana Pacers,3.3046376250629863,0.5303294220366325,MEDIUM,0.411221098337048,True,,
-3,Detroit Pistons,New York Knicks,7:30p,New York Knicks,10.611742845779105,0.7961565757418995,HIGH,0.8303837997140652,True,,
-4,Toronto Raptors,Chicago Bulls,8:00p,Chicago Bulls,3.0088413908489287,0.609666850293187,MEDIUM,0.40888316202203645,True,,
-5,Phoenix Suns,San Antonio Spurs,8:30p,Phoenix Suns,7.150217846619189,0.5870061760106242,HIGH,0.657351443748627,True,,
-6,Boston Celtics,Golden State Warriors,10:00p,Boston Celtics,3.114614878077548,0.5544917856838688,MEDIUM,0.381690790019123,True,,
-7,Orlando Magic,Sacramento Kings,10:00p,Sacramento Kings,3.1628765767637854,0.6127005159090908,MEDIUM,0.42428783070510123,True,,
-8,Denver Nuggets,Los Angeles Clippers,10:30p,Denver Nuggets,1.6038662145191047,0.5321177086779231,LOW,0.2725854405789579,True,,

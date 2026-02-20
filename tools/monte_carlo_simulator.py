@@ -13,7 +13,7 @@ from datetime import datetime
 from scipy import stats as scipy_stats
 
 # Import model and data loader
-from train_lgbm_model import LGBMWinPredictor
+from machine_learning.train_lgbm_model import LGBMWinPredictor
 from machine_learning.data_loader import (
     fetch_nba_games,
     calculate_rolling_stats,
