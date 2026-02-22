@@ -12,13 +12,13 @@ import os
 
 # Import required modules
 sys.path.append(os.path.dirname(__file__))
-from database_handler import SportsAnalyticsDB
-from extended_data_loader import get_extended_training_dataset, refresh_recent_data
-from model_trainer import GaussianProcessPredictor, BayesianEnsemblePredictor, train_gp_models
-from mcmc_sampler import BayesianBasketballHierarchical
+from loaders.database_handler import SportsAnalyticsDB
+from loaders.extended_data_loader import get_extended_training_dataset, refresh_recent_data
+from learners.model_trainer import GaussianProcessPredictor, BayesianEnsemblePredictor, train_gp_models
+from learners.mcmc_sampler import BayesianBasketballHierarchical
 from predictor import predict_game_gp, predict_game_with_epaa
 from model_updater import apply_learning_pipeline
-from validation_tracker import PredictionValidator
+from evaluators.validation_tracker import PredictionValidator
 
 
 class IterativePredictor:
@@ -410,7 +410,7 @@ class IterativePredictor:
             )
             
             # Recreate training data
-            from extended_data_loader import prepare_training_data
+            from loaders.extended_data_loader import prepare_training_data
             self.matchup_df, y, _ = prepare_training_data(self.games_df, verbose=False)
             X = self.matchup_df[self.feature_names].values
             

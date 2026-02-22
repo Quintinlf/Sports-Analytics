@@ -25,12 +25,12 @@ from sklearn.preprocessing import StandardScaler
 import joblib
 from sklearn.isotonic import IsotonicRegression
 
-from machine_learning.data_loader import (
+from loaders.data_loader import (
     fetch_nba_games, 
     calculate_rolling_stats,
     create_matchup_features
 )
-from machine_learning.lgbm_predictor import LGBMQuantilePredictor
+from predictors.lgbm_predictor import LGBMQuantilePredictor
 
 
 def prepare_features_and_target(matchup_df):

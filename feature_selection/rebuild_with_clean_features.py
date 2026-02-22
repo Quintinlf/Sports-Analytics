@@ -15,8 +15,8 @@ import shutil
 sys.path.insert(0, r'c:\Users\Windows User\My_folder\gamble_code\sports_analytics')
 
 import pandas as pd
-from machine_learning.data_loader import fetch_nba_games, calculate_rolling_stats
-from machine_learning.model_trainer import GPPredictor
+from loaders.data_loader import fetch_nba_games, calculate_rolling_stats
+from learners.model_trainer import GPPredictor
 
 print("\n" + "="*80)
 print("🧹 STEP 1: CLEARING CACHES")

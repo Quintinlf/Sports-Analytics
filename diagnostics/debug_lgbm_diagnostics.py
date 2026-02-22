@@ -16,7 +16,7 @@ import numpy as np
 from sklearn.metrics import accuracy_score, brier_score_loss, roc_auc_score, log_loss
 from sklearn.calibration import calibration_curve
 
-from machine_learning.train_lgbm_model import (
+from learners.train_lgbm_model import (
     fetch_nba_games, calculate_rolling_stats, create_matchup_features,
     prepare_features_and_target, LGBMWinPredictor
 )

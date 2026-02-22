@@ -8,7 +8,7 @@ import sys
 sys.path.insert(0, r'c:\Users\Windows User\My_folder\gamble_code\sports_analytics')
 
 import pandas as pd
-from machine_learning.data_loader import fetch_nba_games, calculate_rolling_stats
+from loaders.data_loader import fetch_nba_games, calculate_rolling_stats
 
 print("="*80)
 print("🔍 VERIFICATION: Rolling Stats Leakage Check")

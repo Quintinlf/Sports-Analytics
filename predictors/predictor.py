@@ -14,9 +14,9 @@ import pandas as pd
 from scipy import stats
 import warnings
 try:
-    from .data_loader import get_team_latest_stats
+    from ..loaders.data_loader import get_team_latest_stats
 except ImportError:
-    from data_loader import get_team_latest_stats
+    from loaders.data_loader import get_team_latest_stats
 
 warnings.filterwarnings('ignore')
 

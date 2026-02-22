@@ -13,7 +13,7 @@ print("="*70)
 
 # Load season data
 print("\n📊 Loading 2024-25 season data...")
-from machine_learning.data_loader import fetch_nba_games, calculate_rolling_stats
+from loaders.data_loader import fetch_nba_games, calculate_rolling_stats
 
 try:
     games_df = fetch_nba_games(seasons=['2024-25'], season_type='Regular Season', verbose=True)

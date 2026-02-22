@@ -13,7 +13,7 @@ import os
 
 # Import base data loader functions
 sys.path.append(os.path.dirname(__file__))
-from data_loader import (
+from loaders.data_loader import (
     fetch_nba_games, 
     calculate_rolling_stats, 
     create_matchup_features,
