@@ -84,12 +84,91 @@ class H2HPostPredictor:
         self.h2h_weight = h2h_weight
         self.h2h_min_games = h2h_min_games
     
+    def compute_four_factors_edge(
+        self,
+        home_team: str,
+        away_team: str,
+        matchup_features: dict
+    ) -> dict:
+        """
+        Compare Dean Oliver's Four Factors between home and away team.
+
+        Factors (by impact, per Oliver):
+          1. eFG%       – shot selection quality / efficiency  (higher better)
+          2. TOV%       – turnover rate / unforced errors       (lower  better)
+          3. OREB%      – offensive rebound aggression          (higher better)
+          4. FT Rate    – free throw drawing / paint attacks    (higher better)
+
+        Also includes:
+          - Net Rating differential (points per 100 possessions)
+          - Pythagorean Win% alignment with model prediction
+
+        Returns dict with edge counts per team + net_rating + pythagorean fields.
+        """
+        factors = [
+            ('eFG%',    'EFG_PCT',        True),   # higher is better
+            ('TOV%',    'TOV_PCT',        False),  # lower is better
+            ('OREB%',   'OREB_PCT_APPROX', True),  # higher is better
+            ('FT Rate', 'FT_RATE',        True),   # higher is better
+        ]
+
+        home_adv, away_adv = [], []
+        for label, key, higher_better in factors:
+            h = matchup_features.get(f'HOME_{key}_ROLL')
+            a = matchup_features.get(f'AWAY_{key}_ROLL')
+            if h is None or a is None:
+                continue
+            if higher_better:
+                (home_adv if h > a else away_adv).append(label)
+            else:
+                (home_adv if h < a else away_adv).append(label)
+
+        # Net Rating differential
+        h_net = matchup_features.get('HOME_NET_RTG_APPROX_ROLL')
+        a_net = matchup_features.get('AWAY_NET_RTG_APPROX_ROLL')
+        net_rating_edge = None
+        if h_net is not None and a_net is not None:
+            diff = float(h_net) - float(a_net)
+            net_rating_edge = {
+                'home': round(float(h_net), 1),
+                'away': round(float(a_net), 1),
+                'diff': round(diff, 1),
+                'favors': home_team if diff > 0 else away_team,
+            }
+
+        # Pythagorean Win% alignment
+        h_pyt = matchup_features.get('HOME_PYT_WIN_PCT_ROLL')
+        a_pyt = matchup_features.get('AWAY_PYT_WIN_PCT_ROLL')
+        pythagorean_edge = None
+        if h_pyt is not None and a_pyt is not None:
+            pythagorean_edge = {
+                'home': round(float(h_pyt), 3),
+                'away': round(float(a_pyt), 3),
+                'favors': home_team if float(h_pyt) > float(a_pyt) else away_team,
+            }
+
+        n_home = len(home_adv)
+        n_away = len(away_adv)
+        return {
+            'four_factors_home_count': n_home,
+            'four_factors_away_count': n_away,
+            'four_factors_home_advantages': home_adv,
+            'four_factors_away_advantages': away_adv,
+            'four_factors_edge': (
+                home_team if n_home > n_away
+                else (away_team if n_away > n_home else 'EVEN')
+            ),
+            'net_rating_edge': net_rating_edge,
+            'pythagorean_edge': pythagorean_edge,
+        }
+
     def adjust_prediction(
-        self, 
-        model_prediction: Dict, 
+        self,
+        model_prediction: Dict,
         prediction_date: str,
         away_team: Optional[str] = None,
-        home_team: Optional[str] = None
+        home_team: Optional[str] = None,
+        matchup_features: Optional[dict] = None,  # Four Factors / Net Rtg / Pythagorean context
     ) -> Dict:
         """
         Apply H2H adjustment to model prediction.
@@ -195,9 +274,17 @@ class H2HPostPredictor:
         else:
             adjusted_confidence_level = 'LOW'
         
+        # Decision-quality context (Four Factors / Net Rating / Pythagorean Wins)
+        decision_quality = {}
+        if matchup_features is not None:
+            decision_quality = self.compute_four_factors_edge(
+                home, away, matchup_features
+            )
+
         # Build enriched output
         return {
             **model_prediction,  # Preserve all original fields
+            **decision_quality,  # Four Factors + Net Rating + Pythagorean fields
             
             # Original values (for comparison/validation)
             'original_win_probability': float(model_home_prob),
@@ -263,14 +350,23 @@ class H2HPostPredictor:
             'adjusted_win_probability': float(model_prob),
             'adjusted_confidence_score': float(model_confidence),
             'adjusted_confidence_level': model_prediction.get('confidence', 'UNKNOWN'),
-            
+
             # Original values
             'original_win_probability': float(model_prob),
             'original_confidence_score': float(model_confidence),
             'original_confidence_level': model_prediction.get('confidence', 'UNKNOWN'),
-            
+
             # Metadata
-            'adjustment_skipped_reason': reason
+            'adjustment_skipped_reason': reason,
+
+            # Decision-quality context (empty when matchup_features not passed)
+            'four_factors_home_count': None,
+            'four_factors_away_count': None,
+            'four_factors_home_advantages': [],
+            'four_factors_away_advantages': [],
+            'four_factors_edge': None,
+            'net_rating_edge': None,
+            'pythagorean_edge': None,
         }
     
     def set_weights(self, model_weight: float, h2h_weight: float):
