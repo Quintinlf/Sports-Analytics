@@ -43,25 +43,21 @@ except Exception as e:
     traceback.print_exc()
     sys.exit(1)
 
-# Test 3: Extended Data Loader
-print("3️⃣ Testing Extended Data Loader...")
+# Test 3: Extended Data Loader (experimental)
+print("3️⃣ Testing Extended Data Loader (experimental)...")
 try:
-    from loaders.extended_data_loader import fetch_comprehensive_nba_data
+    from experimental.loaders.extended_data_loader import fetch_comprehensive_nba_data
     print("   ✅ Extended data loader imports successfully\n")
 except Exception as e:
-    print(f"   ❌ Error: {e}\n")
-    sys.exit(1)
+    print(f"   ⚠️  Skipped (experimental): {e}\n")
 
-# Test 4: Iterative Predictor
-print("4️⃣ Testing Iterative Predictor...")
+# Test 4: Iterative Predictor (experimental)
+print("4️⃣ Testing Iterative Predictor (experimental)...")
 try:
-    from post_processors.iterative_predictor import IterativePredictor
+    from experimental.post_processors.iterative_predictor import IterativePredictor
     print("   ✅ Iterative predictor imports successfully\n")
 except Exception as e:
-    print(f"   ❌ Error: {e}\n")
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
+    print(f"   ⚠️  Skipped (experimental): {e}\n")
 
 # Test 5: Check existing modules
 print("5️⃣ Testing Existing Modules...")

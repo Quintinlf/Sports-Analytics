@@ -19,7 +19,7 @@ from loaders.data_loader import (
     create_matchup_features,
     get_all_nba_teams
 )
-from database_handler import SportsAnalyticsDB
+from loaders.database_handler import SportsAnalyticsDB
 
 
 def fetch_comprehensive_nba_data(

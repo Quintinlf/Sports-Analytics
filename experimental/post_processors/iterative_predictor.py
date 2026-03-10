@@ -13,11 +13,11 @@ import os
 # Import required modules
 sys.path.append(os.path.dirname(__file__))
 from loaders.database_handler import SportsAnalyticsDB
-from loaders.extended_data_loader import get_extended_training_dataset, refresh_recent_data
+from experimental.loaders.extended_data_loader import get_extended_training_dataset, refresh_recent_data
 from learners.model_trainer import GaussianProcessPredictor, BayesianEnsemblePredictor, train_gp_models
-from learners.mcmc_sampler import BayesianBasketballHierarchical
-from predictor import predict_game_gp, predict_game_with_epaa
-from model_updater import apply_learning_pipeline
+from experimental.learners.mcmc_sampler import BayesianBasketballHierarchical
+from predictors.predictor import predict_game_gp, predict_game_with_epaa
+from machine_learning.model_updater import apply_learning_pipeline
 from evaluators.validation_tracker import PredictionValidator
 
 

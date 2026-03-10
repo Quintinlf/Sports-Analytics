@@ -12,7 +12,7 @@ import pandas as pd
 # Add paths
 sys.path.append(os.path.join(os.getcwd(), 'machine_learning'))
 
-from post_processors.iterative_predictor import IterativePredictor
+from experimental.post_processors.iterative_predictor import IterativePredictor
 from parsers.game_parser import parse_game_data_from_text
 from loaders.database_handler import SportsAnalyticsDB
 
