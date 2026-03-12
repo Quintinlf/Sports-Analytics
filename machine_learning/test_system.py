@@ -15,7 +15,7 @@ print("=" * 70 + "\n")
 # Test 1: Database Handler
 print("1️⃣ Testing Database Handler...")
 try:
-    from loaders.database_handler import SportsAnalyticsDB
+    from database.database_handler import SportsAnalyticsDB
     db = SportsAnalyticsDB(":memory:")  # In-memory test
     db.create_tables()
     print("   ✅ Database handler working\n")
@@ -46,7 +46,7 @@ except Exception as e:
 # Test 3: Extended Data Loader (experimental)
 print("3️⃣ Testing Extended Data Loader (experimental)...")
 try:
-    from experimental.loaders.extended_data_loader import fetch_comprehensive_nba_data
+    from data.extended_data_loader import fetch_comprehensive_nba_data
     print("   ✅ Extended data loader imports successfully\n")
 except Exception as e:
     print(f"   ⚠️  Skipped (experimental): {e}\n")
@@ -62,8 +62,8 @@ except Exception as e:
 # Test 5: Check existing modules
 print("5️⃣ Testing Existing Modules...")
 try:
-    from loaders.data_loader import get_all_nba_teams
-    from learners.model_trainer import GaussianProcessPredictor
+    from experimental.loaders.data_loader import get_all_nba_teams
+    from model_trainer import GaussianProcessPredictor
     from evaluators.validation_tracker import PredictionValidator
     print("   ✅ All existing modules accessible\n")
 except Exception as e:
