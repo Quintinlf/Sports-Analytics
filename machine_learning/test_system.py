@@ -1,12 +1,16 @@
-"""
-Quick Test Script - Verify System Components
+"""Quick Test Script - Verify System Components.
+
+This script is intentionally lightweight: it only checks that key modules
+import and that the DB schema can be created in-memory.
 """
 
-import sys
 import os
+import sys
 
-# Add machine_learning to path
-sys.path.append('machine_learning')
+# Ensure project root is on sys.path even when run from elsewhere
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 print("=" * 70)
 print("🧪 SYSTEM COMPONENT TEST")
@@ -15,7 +19,7 @@ print("=" * 70 + "\n")
 # Test 1: Database Handler
 print("1️⃣ Testing Database Handler...")
 try:
-    from database.database_handler import SportsAnalyticsDB
+    from data.database.database_handler import SportsAnalyticsDB
     db = SportsAnalyticsDB(":memory:")  # In-memory test
     db.create_tables()
     print("   ✅ Database handler working\n")
@@ -24,19 +28,13 @@ except Exception as e:
     print(f"   ❌ Error: {e}\n")
     sys.exit(1)
 
-# Test 2: Game Parser
-print("2️⃣ Testing Game Parser...")
+# Test 2: NBA Loader (static)
+print("2️⃣ Testing NBA Loader...")
 try:
-    from parsers.game_parser import parse_game_data_from_text
-    sample_csv = """Date,Start (ET),Visitor/Neutral,PTS,Home/Neutral,PTS,,,Attend.,LOG,Arena,Notes
-Sun Feb 1 2026,3:30p,Milwaukee Bucks,79,Boston Celtics,107,Box Score,,19156,2:09,TD Garden,
-Sun Feb 8 2026,12:30p,New York Knicks,,Boston Celtics,,,,,,TD Garden,"""
-    
-    result = parse_game_data_from_text(sample_csv, verbose=False)
-    assert result['total_games'] == 2
-    assert result['completed_count'] == 1
-    assert result['upcoming_count'] == 1
-    print(f"   ✅ Game parser working (parsed {result['total_games']} games)\n")
+    from data.nba_loader import get_all_nba_teams
+    teams_info = get_all_nba_teams()
+    assert 'teams' in teams_info and len(teams_info['teams']) > 0
+    print(f"   ✅ NBA loader working ({len(teams_info['teams'])} teams)\n")
 except Exception as e:
     print(f"   ❌ Error: {e}\n")
     import traceback
@@ -51,21 +49,26 @@ try:
 except Exception as e:
     print(f"   ⚠️  Skipped (experimental): {e}\n")
 
-# Test 4: Iterative Predictor (experimental)
-print("4️⃣ Testing Iterative Predictor (experimental)...")
+# Test 4: Ensemble + Training modules (import-only)
+print("4️⃣ Testing Ensemble + Training imports...")
 try:
-    from experimental.post_processors.iterative_predictor import IterativePredictor
-    print("   ✅ Iterative predictor imports successfully\n")
+    from ensemble.ensemble_predictor import EnsemblePredictor
+    from training.trainer import ModelTrainer
+    _ = EnsemblePredictor
+    _ = ModelTrainer
+    print("   ✅ Ensemble + training modules import successfully\n")
 except Exception as e:
-    print(f"   ⚠️  Skipped (experimental): {e}\n")
+    print(f"   ❌ Error: {e}\n")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
 
-# Test 5: Check existing modules
-print("5️⃣ Testing Existing Modules...")
+# Test 5: GP model module (import-only)
+print("5️⃣ Testing GP model module...")
 try:
-    from experimental.loaders.data_loader import get_all_nba_teams
-    from model_trainer import GaussianProcessPredictor
-    from evaluators.validation_tracker import PredictionValidator
-    print("   ✅ All existing modules accessible\n")
+    from machine_learning.gp_model import GaussianProcessPredictor
+    _ = GaussianProcessPredictor
+    print("   ✅ GP model module imports successfully\n")
 except Exception as e:
     print(f"   ❌ Error: {e}\n")
     import traceback

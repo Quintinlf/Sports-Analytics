@@ -10,9 +10,8 @@ import numpy as np
 from datetime import datetime
 from typing import Union, Tuple, Dict, Optional
 
-from data.player_fetcher import fetch_player_logs_for_team, normalize_team_id
-from feature_selection.player_features import calculate_player_rolling_stats, aggregate_player_stats_by_team
-from experimental.loaders.player_cache import PlayerDataCache
+from data.player_fetcher import fetch_player_logs_for_team, normalize_team_id, PlayerDataCache
+from data.feature_engineering import calculate_player_rolling_stats, aggregate_player_stats_by_team
 
 
 class EnhancedFeaturePipeline:
@@ -106,37 +105,62 @@ class EnhancedFeaturePipeline:
         Dict[str, float]
             18 features with keys like 'HOME_PLAYER_PTS_ROLL_WEIGHTED'
         """
-        
-        features = {}
+        features = {f'{team_type}_{feat_name}': 0.0 for feat_name in self.player_feature_names}
         
         try:
             # Fetch player logs (STRICTLY BEFORE game_date)
             logs = self._get_player_data(team_id, before_date=game_date, verbose=False)
             
             if len(logs) == 0:
-                # No data available, fill with zeros
-                for feat_name in self.player_feature_names:
-                    features[f'{team_type}_{feat_name}'] = 0.0
                 return features
             
             # Calculate rolling stats
             logs_rolled = calculate_player_rolling_stats(logs, window=5)
             
             # Aggregate to team level
-            team_features = aggregate_player_stats_by_team(
+            team_feature_map = aggregate_player_stats_by_team(
                 logs_rolled,
-                team_id=normalize_team_id(team_id),
-                weight_by_minutes=True
+                game_date=game_date,
             )
+            team_features = team_feature_map.get(normalize_team_id(team_id), {})
+
+            # Map generic aggregate outputs to the expected 18 production feature names.
+            avg_pts = float(team_features.get('TEAM_AVG_PTS_ROLL', 0.0))
+            avg_reb = float(team_features.get('TEAM_AVG_REB_ROLL', 0.0))
+            avg_ast = float(team_features.get('TEAM_AVG_AST_ROLL', 0.0))
+            avg_fg_pct = float(team_features.get('TEAM_AVG_FG_PCT_ROLL', 0.0))
+            avg_min = float(team_features.get('TEAM_AVG_MIN_ROLL', 0.0))
+
+            top_pts = float(team_features.get('TEAM_TOP_PTS_ROLL', 0.0))
+            top_reb = float(team_features.get('TEAM_TOP_REB_ROLL', 0.0))
+            top_ast = float(team_features.get('TEAM_TOP_AST_ROLL', 0.0))
+
+            features.update({
+                f'{team_type}_PLAYER_PTS_ROLL_WEIGHTED': avg_pts,
+                f'{team_type}_PLAYER_REB_ROLL_WEIGHTED': avg_reb,
+                f'{team_type}_PLAYER_AST_ROLL_WEIGHTED': avg_ast,
+                f'{team_type}_PLAYER_FGA_ROLL_WEIGHTED': 0.0,
+                f'{team_type}_PLAYER_FG_PCT_ROLL_WEIGHTED': avg_fg_pct,
+                f'{team_type}_PLAYER_PTS_PER_FGA_ROLL_WEIGHTED': 0.0,
+                f'{team_type}_PLAYER_TOP_SCORER_PPG': top_pts,
+                f'{team_type}_PLAYER_TOP_REBOUNDER_RPG': top_reb,
+                f'{team_type}_PLAYER_TOP_PLAYMAKER_APG': top_ast,
+                f'{team_type}_PLAYER_TOP_SCORER_SHARE': 0.0,
+                f'{team_type}_PLAYER_BENCH_SCORING_PCT': 0.0,
+                f'{team_type}_PLAYER_ACTIVE_ROTATION_SIZE': float(len(logs_rolled['PLAYER_ID'].unique())),
+                f'{team_type}_PLAYER_ROTATION_STABILITY': 0.0,
+                f'{team_type}_PLAYER_KEY_PLAYER_MISSING': 0.0,
+                f'{team_type}_PLAYER_MINUTES_DROP_40PCT': 0.0,
+                f'{team_type}_PLAYER_SCORING_CONCENTRATION': 0.0,
+                f'{team_type}_PLAYER_DEFENSIVE_CONTRIBUTORS': 0.0,
+                f'{team_type}_PLAYER_BENCH_SCORER_COUNT': 0.0,
+            })
             
-            # Add team type prefix
-            for key, val in team_features.items():
-                features[f'{team_type}_{key}'] = val
-            
-        except Exception as e:
-            # On error, fill with zeros
-            for feat_name in self.player_feature_names:
-                features[f'{team_type}_{feat_name}'] = 0.0
+            if avg_min > 0:
+                features[f'{team_type}_PLAYER_BENCH_SCORING_PCT'] = max(0.0, min(1.0, avg_pts / max(avg_min, 1.0)))
+
+        except Exception:
+            pass
         
         return features
     

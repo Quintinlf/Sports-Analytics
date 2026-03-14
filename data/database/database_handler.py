@@ -109,6 +109,36 @@ class SportsAnalyticsDB:
             )
         """)
         
+        # Feature snapshots for failure analysis
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS prediction_features (
+                feature_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                prediction_id INTEGER NOT NULL,
+                feature_snapshot TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (prediction_id) REFERENCES predictions(prediction_id)
+            )
+        """)
+
+        # Retraining metadata / incremental counter
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS retraining_metadata (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                incremental_count INTEGER DEFAULT 0,
+                last_incremental TEXT,
+                last_full_retrain TEXT,
+                model_version TEXT,
+                ensemble_weights TEXT,
+                updated_at TEXT NOT NULL
+            )
+        """)
+
+        # Add model_version column to predictions if it doesn't exist yet
+        try:
+            cursor.execute("ALTER TABLE predictions ADD COLUMN model_version TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Create indexes for performance
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_predictions_game_id ON predictions(game_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_predictions_date ON predictions(game_date)")
@@ -117,7 +147,8 @@ class SportsAnalyticsDB:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_prediction ON model_history(prediction_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_games_cache_id ON games_cache(game_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_games_cache_date ON games_cache(game_date)")
-        
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_features_prediction ON prediction_features(prediction_id)")
+
         self.conn.commit()
         
     def insert_prediction(self, prediction_data: Dict[str, Any]) -> int:
@@ -130,8 +161,9 @@ class SportsAnalyticsDB:
                 predicted_spread, predicted_home_score, predicted_away_score,
                 predicted_winner, win_probability, confidence_score, confidence_level,
                 pred_std, ci_lower, ci_upper, epaa_weight, model_versions,
-                iteration_count, retraining_triggered, prediction_timestamp, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                iteration_count, retraining_triggered, prediction_timestamp, notes,
+                model_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             prediction_data.get('game_id'),
             prediction_data['game_date'],
@@ -152,7 +184,8 @@ class SportsAnalyticsDB:
             prediction_data.get('iteration_count', 1),
             prediction_data.get('retraining_triggered', False),
             datetime.now().isoformat(),
-            prediction_data.get('notes')
+            prediction_data.get('notes'),
+            prediction_data.get('model_version')
         ))
         
         self.conn.commit()
@@ -323,6 +356,81 @@ class SportsAnalyticsDB:
         row = cursor.fetchone()
         return dict(row) if row else {}
     
+    def log_prediction_features(self, prediction_id: int, features: dict) -> int:
+        """Store raw feature snapshot for failure analysis"""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO prediction_features (prediction_id, feature_snapshot, created_at)
+            VALUES (?, ?, ?)
+        """, (prediction_id, json.dumps(features), datetime.now().isoformat()))
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def get_retraining_state(self) -> Dict[str, Any]:
+        """Return the most recent retraining metadata row"""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM retraining_metadata ORDER BY id DESC LIMIT 1")
+        row = cursor.fetchone()
+        return dict(row) if row else {'incremental_count': 0, 'model_version': None}
+
+    def update_retraining_state(
+        self,
+        incremental_count: int,
+        model_version: Optional[str] = None,
+        full_retrain: bool = False,
+        ensemble_weights: Optional[dict] = None,
+    ) -> None:
+        """Insert a new retraining metadata record.
+
+        Notes
+        -----
+        This table is append-only and callers frequently update just one field
+        (e.g. bumping incremental_count). Because other modules (like
+        WeightManager) read the MOST RECENT row, we must preserve prior state
+        for fields not explicitly provided.
+        """
+        cursor = self.conn.cursor()
+        now = datetime.now().isoformat()
+
+        prev = self.get_retraining_state() if self.conn is not None else {}
+
+        effective_model_version = (
+            model_version if model_version is not None else prev.get('model_version')
+        )
+
+        # Preserve ensemble weights unless explicitly overridden.
+        prev_weights_raw = prev.get('ensemble_weights')
+        if ensemble_weights is None:
+            effective_weights_raw = prev_weights_raw
+        else:
+            effective_weights_raw = json.dumps(ensemble_weights)
+
+        # Preserve timestamps unless explicitly updated.
+        effective_last_incremental = (
+            now if not full_retrain else prev.get('last_incremental')
+        )
+        effective_last_full_retrain = (
+            now if full_retrain else prev.get('last_full_retrain')
+        )
+
+        cursor.execute(
+            """
+            INSERT INTO retraining_metadata
+                (incremental_count, last_incremental, last_full_retrain,
+                 model_version, ensemble_weights, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                int(incremental_count),
+                effective_last_incremental,
+                effective_last_full_retrain,
+                effective_model_version,
+                effective_weights_raw,
+                now,
+            ),
+        )
+        self.conn.commit()
+
     def close(self):
         """Close database connection"""
         if self.conn:
@@ -338,35 +446,3 @@ class SportsAnalyticsDB:
 def get_database(db_path: str = "sports_analytics.db") -> SportsAnalyticsDB:
     """Factory function to get database instance"""
     return SportsAnalyticsDB(db_path)
-
-
-"""Clean up duplicate predictions in the database, keeping only the latest run."""
-import sqlite3
-
-conn = sqlite3.connect('predictions.db')
-
-# Check current state
-before = conn.execute("SELECT COUNT(*) FROM predictions WHERE game_date = '2026-02-19'").fetchone()[0]
-print(f"Before cleanup: {before} rows for Feb 19, 2026")
-
-# Delete all but the most recent predictions for each game on Feb 19
-conn.execute("""
-DELETE FROM predictions 
-WHERE game_date = '2026-02-19' 
-AND id NOT IN (
-    SELECT MAX(id) 
-    FROM predictions 
-    WHERE game_date = '2026-02-19'
-    GROUP BY game_num
-)
-""")
-
-conn.commit()
-
-# Check after cleanup
-after = conn.execute("SELECT COUNT(*) FROM predictions WHERE game_date = '2026-02-19'").fetchone()[0]
-print(f"After cleanup: {after} rows for Feb 19, 2026")
-print(f"Removed {before - after} duplicate rows\n")
-
-conn.close()
-print("✅ Database cleaned")

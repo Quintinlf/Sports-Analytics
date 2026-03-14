@@ -429,8 +429,8 @@ from typing import Dict, Tuple, Optional, List
 import warnings
 warnings.filterwarnings('ignore')
 
-# GP models live in learners â€” import here for convenience
-from model_trainer import GaussianProcessPredictor, train_gp_models as train_gp_ensemble  # noqa: F401
+# GP models are implemented in machine_learning.gp_model
+from machine_learning.gp_model import GaussianProcessPredictor, train_gp_models as train_gp_ensemble  # noqa: F401
 
 
 class BayesianNBAAnalyzer:
