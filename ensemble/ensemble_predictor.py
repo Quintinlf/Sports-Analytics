@@ -268,8 +268,8 @@ class EnsemblePredictor:
 # ------------------------------------------------------------------
 
 def _confidence_label(uncertainty: float) -> str:
-    if uncertainty < 4.0:
+    if uncertainty < 6.0:
         return 'HIGH'
-    if uncertainty < 8.0:
+    if uncertainty < 12.0:
         return 'MEDIUM'
     return 'LOW'

@@ -88,14 +88,9 @@ def generate(games_predictions: List[Dict], title: str = 'NBA Game Predictions R
     )
 
     html = f"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{escape(title)}</title>
+<div class="nba-report">
   <style>
-    :root {{
+    .nba-report {{
       --bg: #f7f4ef;
       --card: #ffffff;
       --ink: #1f2933;
@@ -105,27 +100,25 @@ def generate(games_predictions: List[Dict], title: str = 'NBA Game Predictions R
       --high: #0b8f46;
       --medium: #c77d00;
       --low: #b42318;
-    }}
 
-    * {{ box-sizing: border-box; }}
-    body {{
-      margin: 0;
       font-family: "Segoe UI", "Trebuchet MS", Verdana, sans-serif;
       color: var(--ink);
       background:
         radial-gradient(circle at 10% -10%, #d9f7f3 0%, transparent 45%),
         radial-gradient(circle at 100% 0%, #fdeacc 0%, transparent 40%),
         var(--bg);
-      min-height: 100vh;
+      min-height: 100%;
       padding: 24px;
     }}
 
-    .wrap {{
+    .nba-report * {{ box-sizing: border-box; }}
+
+    .nba-report .wrap {{
       max-width: 1200px;
       margin: 0 auto;
     }}
 
-    .header {{
+    .nba-report .header {{
       background: var(--card);
       border: 1px solid var(--line);
       border-radius: 16px;
@@ -134,19 +127,19 @@ def generate(games_predictions: List[Dict], title: str = 'NBA Game Predictions R
       margin-bottom: 16px;
     }}
 
-    .title {{
+    .nba-report .title {{
       margin: 0;
       font-size: clamp(1.25rem, 1.1rem + 1vw, 2rem);
       letter-spacing: 0.3px;
     }}
 
-    .meta {{
+    .nba-report .meta {{
       margin-top: 8px;
       color: var(--muted);
       font-size: 0.95rem;
     }}
 
-    .card {{
+    .nba-report .card {{
       background: var(--card);
       border: 1px solid var(--line);
       border-radius: 16px;
@@ -154,17 +147,17 @@ def generate(games_predictions: List[Dict], title: str = 'NBA Game Predictions R
       box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
     }}
 
-    .table-wrap {{
+    .nba-report .table-wrap {{
       overflow-x: auto;
     }}
 
-    table {{
+    .nba-report table {{
       width: 100%;
       border-collapse: collapse;
       min-width: 880px;
     }}
 
-    th, td {{
+    .nba-report th, .nba-report td {{
       border-bottom: 1px solid var(--line);
       padding: 12px 10px;
       text-align: left;
@@ -172,7 +165,7 @@ def generate(games_predictions: List[Dict], title: str = 'NBA Game Predictions R
       white-space: nowrap;
     }}
 
-    th {{
+    .nba-report th {{
       font-size: 0.8rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
@@ -180,11 +173,11 @@ def generate(games_predictions: List[Dict], title: str = 'NBA Game Predictions R
       background: #fbfcfd;
     }}
 
-    tr:hover td {{
+    .nba-report tr:hover td {{
       background: #fbfffd;
     }}
 
-    .badge {{
+    .nba-report .badge {{
       display: inline-block;
       border-radius: 999px;
       padding: 4px 10px;
@@ -193,11 +186,11 @@ def generate(games_predictions: List[Dict], title: str = 'NBA Game Predictions R
       color: #fff;
     }}
 
-    .badge-high {{ background: var(--high); }}
-    .badge-medium {{ background: var(--medium); }}
-    .badge-low {{ background: var(--low); }}
+    .nba-report .badge-high {{ background: var(--high); }}
+    .nba-report .badge-medium {{ background: var(--medium); }}
+    .nba-report .badge-low {{ background: var(--low); }}
 
-    .empty {{
+    .nba-report .empty {{
       text-align: center;
       color: var(--muted);
       font-style: italic;
@@ -205,12 +198,11 @@ def generate(games_predictions: List[Dict], title: str = 'NBA Game Predictions R
     }}
 
     @media (max-width: 700px) {{
-      body {{ padding: 14px; }}
-      .header {{ padding: 16px; }}
+      .nba-report {{ padding: 14px; }}
+      .nba-report .header {{ padding: 16px; }}
     }}
   </style>
-</head>
-<body>
+
   <div class="wrap">
     <section class="header">
       <h1 class="title">{escape(title)}</h1>
@@ -240,8 +232,7 @@ def generate(games_predictions: List[Dict], title: str = 'NBA Game Predictions R
       </div>
     </section>
   </div>
-</body>
-</html>
+</div>
 """
 
     return html

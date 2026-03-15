@@ -24,6 +24,30 @@ from data.feature_engineering import prepare_training_data as _prepare_training_
 from data.nba_loader import fetch_nba_games, get_all_nba_teams
 
 
+def _to_json_safe(obj):
+    """Convert pandas/numpy values into JSON-serializable Python values."""
+    if obj is None:
+        return None
+    if isinstance(obj, pd.Timestamp):
+        return obj.isoformat()
+    if isinstance(obj, pd.Series):
+        return {k: _to_json_safe(v) for k, v in obj.to_dict().items()}
+    if isinstance(obj, dict):
+        return {k: _to_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_json_safe(v) for v in obj]
+    if isinstance(obj, np.ndarray):
+        return _to_json_safe(obj.tolist())
+    if isinstance(obj, np.generic):
+        return obj.item()
+    try:
+        if pd.isna(obj):
+            return None
+    except Exception:
+        pass
+    return obj
+
+
 def fetch_comprehensive_nba_data(
     seasons: Optional[List[str]] = None,
     season_type: str = 'Regular Season',
@@ -79,21 +103,13 @@ def cache_games_to_db(
             if len(game_rows) < 2:
                 continue
 
-            home_mask = game_rows['MATCHUP'].astype(str).str.contains('vs\.', na=False)
+            home_mask = game_rows['MATCHUP'].astype(str).str.contains(r'vs\.', na=False)
             if int(home_mask.sum()) == 1:
                 home_row = game_rows[home_mask].iloc[0]
                 away_row = game_rows[~home_mask].iloc[0]
             else:
                 home_row = game_rows.iloc[0]
                 away_row = game_rows.iloc[1]
-
-            def _to_json_safe(obj):
-                """Convert pandas Series or dict to JSON-serializable format."""
-                if isinstance(obj, pd.Series):
-                    obj = obj.to_dict()
-                if isinstance(obj, dict):
-                    return {k: (str(v) if isinstance(v, pd.Timestamp) else v) for k, v in obj.items()}
-                return obj
             
             game_data = {
                 'game_id': str(game_id),

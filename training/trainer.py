@@ -10,6 +10,7 @@ Full retraining pipeline for production models:
 
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Dict
 
 import numpy as np
@@ -32,7 +33,8 @@ class ModelTrainer:
 
     def __init__(self, db_path: str = 'sports_analytics.db'):
         self.db_path = db_path
-        self.model_dir = os.path.join('machine_learning', 'models')
+        db_root = Path(db_path).expanduser().resolve().parent
+        self.model_dir = str(db_root / 'machine_learning' / 'models')
         os.makedirs(self.model_dir, exist_ok=True)
 
     def full_retrain(self, verbose: bool = True) -> Dict:

@@ -9,6 +9,54 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 import os
 
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
+
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
+
+def _to_json_serializable(obj: Any) -> Any:
+    """Recursively convert pandas/numpy objects to JSON-safe values."""
+    if obj is None:
+        return None
+
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+
+    if pd is not None:
+        if isinstance(obj, pd.Timestamp):
+            return obj.isoformat()
+        if isinstance(obj, pd.Series):
+            return {k: _to_json_serializable(v) for k, v in obj.to_dict().items()}
+        if isinstance(obj, pd.DataFrame):
+            return [{k: _to_json_serializable(v) for k, v in rec.items()} for rec in obj.to_dict(orient='records')]
+
+    if np is not None:
+        if isinstance(obj, np.ndarray):
+            return _to_json_serializable(obj.tolist())
+        if isinstance(obj, np.generic):
+            return obj.item()
+
+    if isinstance(obj, dict):
+        return {k: _to_json_serializable(v) for k, v in obj.items()}
+
+    if isinstance(obj, (list, tuple, set)):
+        return [_to_json_serializable(v) for v in obj]
+
+    if pd is not None:
+        try:
+            if pd.isna(obj):
+                return None
+        except Exception:
+            pass
+
+    return obj
+
 
 class SportsAnalyticsDB:
     """Handler for SQLite database operations"""
@@ -180,7 +228,7 @@ class SportsAnalyticsDB:
             prediction_data.get('ci_lower'),
             prediction_data.get('ci_upper'),
             prediction_data.get('epaa_weight'),
-            json.dumps(prediction_data.get('model_versions', {})),
+            json.dumps(_to_json_serializable(prediction_data.get('model_versions', {}))),
             prediction_data.get('iteration_count', 1),
             prediction_data.get('retraining_triggered', False),
             datetime.now().isoformat(),
@@ -233,8 +281,8 @@ class SportsAnalyticsDB:
             log_data['action'],
             log_data.get('confidence_before'),
             log_data.get('confidence_after'),
-            json.dumps(log_data.get('parameters_changed', {})),
-            json.dumps(log_data.get('metrics', {})),
+            json.dumps(_to_json_serializable(log_data.get('parameters_changed', {}))),
+            json.dumps(_to_json_serializable(log_data.get('metrics', {}))),
             datetime.now().isoformat()
         ))
         
@@ -262,7 +310,7 @@ class SportsAnalyticsDB:
             game_data.get('home_score'),
             game_data.get('away_score'),
             game_data.get('game_status'),
-            json.dumps(game_data.get('stats', {})),
+            json.dumps(_to_json_serializable(game_data.get('stats', {}))),
             datetime.now().isoformat()
         ))
         
@@ -333,6 +381,98 @@ class SportsAnalyticsDB:
         
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
+
+    def get_batch_accuracy_comparison(
+        self,
+        window_batches: int = 7,
+        point_tolerance: float = 5.0,
+    ) -> Dict[str, Any]:
+        """Compare current vs previous batch-window prediction accuracy.
+
+        A "batch" is inferred from prediction date (YYYY-MM-DD part of
+        prediction_timestamp), which matches the notebook's one-run/day usage.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                p.prediction_timestamp,
+                p.predicted_spread,
+                gc.home_score,
+                gc.away_score
+            FROM predictions p
+            JOIN games_cache gc ON gc.game_id = p.game_id
+            WHERE gc.home_score IS NOT NULL
+              AND gc.away_score IS NOT NULL
+            """
+        )
+        rows = [dict(r) for r in cursor.fetchall()]
+        if not rows:
+            return {
+                'current': None,
+                'previous': None,
+                'delta': None,
+                'window_batches': window_batches,
+                'point_tolerance': point_tolerance,
+            }
+
+        for r in rows:
+            ts = str(r.get('prediction_timestamp') or '')
+            r['batch_day'] = ts[:10] if len(ts) >= 10 else ''
+
+        batch_days = sorted({r['batch_day'] for r in rows if r.get('batch_day')}, reverse=True)
+        current_days = set(batch_days[:window_batches])
+        previous_days = set(batch_days[window_batches: window_batches * 2])
+
+        def _calc(day_set: set) -> Optional[Dict[str, Any]]:
+            if not day_set:
+                return None
+            items = [r for r in rows if r.get('batch_day') in day_set]
+            if not items:
+                return None
+
+            spread_errors = []
+            winner_correct = 0
+            point_hits = 0
+
+            for r in items:
+                pred_spread = float(r.get('predicted_spread') or 0.0)
+                actual_spread = float((r.get('home_score') or 0) - (r.get('away_score') or 0))
+
+                err = abs(pred_spread - actual_spread)
+                spread_errors.append(err)
+                if (pred_spread >= 0) == (actual_spread >= 0):
+                    winner_correct += 1
+                if err <= point_tolerance:
+                    point_hits += 1
+
+            total = len(items)
+            return {
+                'batches': len(day_set),
+                'samples': total,
+                'winner_accuracy': (winner_correct * 100.0 / total) if total else 0.0,
+                'point_accuracy': (point_hits * 100.0 / total) if total else 0.0,
+                'spread_mae': (sum(spread_errors) / total) if total else None,
+            }
+
+        current = _calc(current_days)
+        previous = _calc(previous_days)
+
+        delta = None
+        if current and previous:
+            delta = {
+                'winner_accuracy': current['winner_accuracy'] - previous['winner_accuracy'],
+                'point_accuracy': current['point_accuracy'] - previous['point_accuracy'],
+                'spread_mae': previous['spread_mae'] - current['spread_mae'],
+            }
+
+        return {
+            'current': current,
+            'previous': previous,
+            'delta': delta,
+            'window_batches': window_batches,
+            'point_tolerance': point_tolerance,
+        }
     
     def get_performance_stats(self, days: int = 30) -> Dict[str, Any]:
         """Calculate aggregate performance statistics"""
@@ -362,7 +502,7 @@ class SportsAnalyticsDB:
         cursor.execute("""
             INSERT INTO prediction_features (prediction_id, feature_snapshot, created_at)
             VALUES (?, ?, ?)
-        """, (prediction_id, json.dumps(features), datetime.now().isoformat()))
+        """, (prediction_id, json.dumps(_to_json_serializable(features)), datetime.now().isoformat()))
         self.conn.commit()
         return cursor.lastrowid
 
