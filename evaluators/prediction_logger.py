@@ -81,6 +81,12 @@ class PredictionLogger:
 
         spread = float(prediction.get('spread', 0.0))
         win_prob = float(prediction.get('win_prob', 0.5))
+        win_prob_calibrated_raw = prediction.get('win_prob_calibrated', prediction.get('win_probability_calibrated'))
+        win_prob_calibrated = (
+            float(win_prob_calibrated_raw)
+            if win_prob_calibrated_raw is not None
+            else None
+        )
         confidence = prediction.get('confidence', 'MEDIUM')
         # Map confidence label to numeric score
         _conf_score = {'HIGH': 0.85, 'MEDIUM': 0.65, 'LOW': 0.45}
@@ -98,11 +104,27 @@ class PredictionLogger:
             'predicted_away_score': prediction.get('predicted_away_score'),
             'predicted_winner': predicted_winner,
             'win_probability': win_prob,
+            'win_probability_calibrated': win_prob_calibrated,
             'confidence_score': confidence_score,
             'confidence_level': confidence,
             'pred_std': prediction.get('uncertainty'),
             'ci_lower': prediction.get('q10'),
             'ci_upper': prediction.get('q90'),
+            'new_feature': prediction.get('new_feature'),
+            'elo_diff': prediction.get('elo_diff'),
+            'last5_win_pct_home': prediction.get('last5_win_pct_home'),
+            'last5_win_pct_away': prediction.get('last5_win_pct_away'),
+            'last5_point_diff_home': prediction.get('last5_point_diff_home'),
+            'last5_point_diff_away': prediction.get('last5_point_diff_away'),
+            'rest_days_home': prediction.get('rest_days_home'),
+            'rest_days_away': prediction.get('rest_days_away'),
+            'rest_diff': prediction.get('rest_diff'),
+            'is_back_to_back_home': prediction.get('is_back_to_back_home'),
+            'is_back_to_back_away': prediction.get('is_back_to_back_away'),
+            'home_away_strength_diff': prediction.get('home_away_strength_diff'),
+            'schedule_density_diff': prediction.get('schedule_density_diff'),
+            'pace_diff': prediction.get('pace_diff'),
+            'injury_proxy': prediction.get('injury_proxy'),
             'model_versions': prediction.get('model_contributions', {}),
             'model_version': self._model_version,
             'notes': prediction.get('notes'),

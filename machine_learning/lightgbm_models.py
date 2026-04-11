@@ -23,6 +23,25 @@ from sklearn.preprocessing import StandardScaler
 warnings.filterwarnings('ignore')
 
 _MODEL_DIR = os.path.join(os.path.dirname(__file__), 'models')
+HIGH_SIGNAL_FEATURE_COLUMNS = [
+    'elo_diff',
+    'last5_win_pct_home',
+    'last5_win_pct_away',
+    'last5_point_diff_home',
+    'last5_point_diff_away',
+    'rest_days_home',
+    'rest_days_away',
+    'rest_diff',
+    'is_back_to_back_home',
+    'is_back_to_back_away',
+    'home_away_strength_diff',
+    'schedule_density_diff',
+    'pace_diff',
+    'injury_proxy',
+    'expected_payoff_matrix',
+    'optimal_path_delta',
+    'signal_consistency_score',
+]
 
 
 # ---------------------------------------------------------------------------
@@ -36,13 +55,21 @@ def prepare_features_and_target(matchup_df: pd.DataFrame):
     Feature columns are any HOME_* / AWAY_* columns that contain
     _ROLL, REST_DAYS, WIN_STREAK, IS_BACK_TO_BACK, or WIN_RATE_10.
     """
-    feature_cols = [
+    base_feature_cols = [
         col for col in matchup_df.columns
         if ('HOME_' in col or 'AWAY_' in col)
         and ('_ROLL' in col or 'REST_DAYS' in col or 'WIN_STREAK' in col
              or 'IS_BACK_TO_BACK' in col or 'WIN_RATE_10' in col)
     ]
-    X = matchup_df[feature_cols].copy().fillna(matchup_df[feature_cols].mean())
+    derived_feature_cols = [col for col in HIGH_SIGNAL_FEATURE_COLUMNS if col in matchup_df.columns]
+    feature_cols = base_feature_cols + derived_feature_cols
+
+    if not feature_cols:
+        raise ValueError('No feature columns available for training.')
+
+    X = matchup_df[feature_cols].copy()
+    X = X.apply(pd.to_numeric, errors='coerce')
+    X = X.fillna(X.mean(numeric_only=True)).fillna(0.0)
     y_diff = matchup_df['POINT_DIFF'].values
     y_win = matchup_df['HOME_WIN'].values
     return X, y_diff, y_win, feature_cols
@@ -110,7 +137,7 @@ class LGBMQuantilePredictor:
             raise ImportError("lightgbm required: pip install lightgbm")
 
         print(f"  Training LightGBM quantile models {quantiles} "
-              f"on {X_train.shape[0]} samples / {X_train.shape[1]} features")
+              f"on {X_train.shape[0]} samples / {X_train.shape[1]} features", flush=True)
 
         train_data = lgb.Dataset(X_train, label=y_train)
         valid_sets = []
@@ -132,7 +159,7 @@ class LGBMQuantilePredictor:
                 callbacks=callbacks,
             )
             self.models[q_key] = model
-            print(f"    {q_key.upper()}: {model.num_trees()} trees")
+            print(f"    {q_key.upper()}: {model.num_trees()} trees", flush=True)
 
         self.is_fitted = True
         return self.models
@@ -170,7 +197,7 @@ class LGBMQuantilePredictor:
         p = self.predict(X_calib)
         in_interval = (y_calib >= p['q10']) & (y_calib <= p['q90'])
         coverage = float(in_interval.mean())
-        print(f"  Calibration coverage: {coverage:.1%}  (target 80%)")
+        print(f"  Calibration coverage: {coverage:.1%}  (target 80%)", flush=True)
         return {'coverage': coverage, 'n_samples': len(y_calib)}
 
     # ------------------------------------------------------------------
@@ -247,7 +274,7 @@ class LGBMWinPredictor:
         X_tr = pd.DataFrame(self.scaler.fit_transform(X_train), columns=X_train.columns)
         X_vl = pd.DataFrame(self.scaler.transform(X_val), columns=X_val.columns)
 
-        print("\n  Training LightGBM Win Predictor")
+        print("\n  Training LightGBM Win Predictor", flush=True)
 
         # 1. Quantile model
         self.quantile_model = LGBMQuantilePredictor(regularize_streak=True)
@@ -269,7 +296,7 @@ class LGBMWinPredictor:
             self.calibrator = iso
             win_prob_cal = iso.predict(win_prob_raw)
         except Exception as exc:
-            print(f"  Warning: calibrator failed ({exc}); using raw probabilities")
+            print(f"  Warning: calibrator failed ({exc}); using raw probabilities", flush=True)
             win_prob_cal = win_prob_raw
 
         # 3. Interval scale (mean half-width on validation)
@@ -283,7 +310,7 @@ class LGBMWinPredictor:
         accuracy = accuracy_score(y_win_val, win_pred)
         brier = brier_score_loss(y_win_val, win_prob_cal)
 
-        print(f"  Accuracy: {accuracy:.1%}  Brier: {brier:.4f}")
+        print(f"  Accuracy: {accuracy:.1%}  Brier: {brier:.4f}", flush=True)
         self.is_fitted = True
 
         return {'accuracy': accuracy, 'brier_score': brier}

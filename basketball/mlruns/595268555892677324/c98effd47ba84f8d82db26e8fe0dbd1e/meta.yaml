@@ -1,0 +1,14 @@
+artifact_uri: file:c:/Users/Windows User/My_folder/Sports_Analytics/basketball/mlruns/595268555892677324/c98effd47ba84f8d82db26e8fe0dbd1e/artifacts
+end_time: 1774140981749
+entry_point_name: ''
+experiment_id: '595268555892677324'
+lifecycle_stage: active
+run_id: c98effd47ba84f8d82db26e8fe0dbd1e
+run_name: nba-feedback-loop
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1774140981066
+status: 3
+tags: []
+user_id: Windows User

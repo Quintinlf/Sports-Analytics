@@ -71,12 +71,12 @@ def fetch_comprehensive_nba_data(
         seasons = ['2022-23', '2023-24', '2024-25']
 
     if verbose:
-        print('=' * 70)
-        print(f'COMPREHENSIVE DATA FETCH: {len(seasons)} seasons')
-        print('=' * 70)
-        print('Seasons:', ', '.join(seasons))
-        print('Season type:', season_type)
-        print('Cache:', 'enabled' if use_cache else 'disabled')
+        print('=' * 70, flush=True)
+        print(f'COMPREHENSIVE DATA FETCH: {len(seasons)} seasons', flush=True)
+        print('=' * 70, flush=True)
+        print('Seasons:', ', '.join(seasons), flush=True)
+        print('Season type:', season_type, flush=True)
+        print('Cache:', 'enabled' if use_cache else 'disabled', flush=True)
 
     games_df = fetch_nba_games(seasons=seasons, season_type=season_type, verbose=verbose)
     games_with_stats = calculate_rolling_stats(games_df, window=5)
@@ -130,10 +130,10 @@ def cache_games_to_db(
                 cached_count += 1
             except Exception as exc:
                 if verbose:
-                    print(f'Warning: could not cache game {game_id}: {exc}')
+                    print(f'Warning: could not cache game {game_id}: {exc}', flush=True)
 
     if verbose:
-        print(f'Cached {cached_count} unique games')
+        print(f'Cached {cached_count} unique games', flush=True)
     return cached_count
 
 
@@ -163,9 +163,9 @@ def get_extended_training_dataset(
       - team_data
     """
     if verbose:
-        print('\n' + '=' * 70)
-        print('LOADING EXTENDED TRAINING DATASET')
-        print('=' * 70)
+        print('\n' + '=' * 70, flush=True)
+        print('LOADING EXTENDED TRAINING DATASET', flush=True)
+        print('=' * 70, flush=True)
 
     games_df = fetch_comprehensive_nba_data(
         seasons=['2022-23', '2023-24', '2024-25'],
@@ -180,12 +180,12 @@ def get_extended_training_dataset(
     team_info = get_all_nba_teams()
 
     if verbose:
-        print('=' * 70)
-        print('DATASET READY')
-        print(f'Samples: {len(X)}')
-        print(f'Features: {len(feature_names)}')
-        print(f'Teams: {len(team_info.get("ids", []))}')
-        print('=' * 70 + '\n')
+        print('=' * 70, flush=True)
+        print('DATASET READY', flush=True)
+        print(f'Samples: {len(X)}', flush=True)
+        print(f'Features: {len(feature_names)}', flush=True)
+        print(f'Teams: {len(team_info.get("ids", []))}', flush=True)
+        print('=' * 70 + '\n', flush=True)
 
     return {
         'games_df': games_df,

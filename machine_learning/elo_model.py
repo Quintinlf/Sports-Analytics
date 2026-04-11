@@ -128,7 +128,7 @@ class EloModel:
                 'home_advantage': self.home_advantage,
                 'saved_at': datetime.now().isoformat(),
             }, fh)
-        print(f"  Saved -> {filepath}")
+        print(f"  Saved -> {filepath}", flush=True)
 
     @classmethod
     def load(cls, filepath: str) -> 'EloModel':

@@ -5,7 +5,7 @@ Manages storage of predictions, results, model history, and cached game data
 
 import sqlite3
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 import os
 
@@ -83,6 +83,9 @@ class SportsAnalyticsDB:
                 prediction_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 game_id TEXT,
                 game_date TEXT NOT NULL,
+                game_date_utc TEXT,
+                game_date_pst TEXT,
+                game_date_local_date TEXT,
                 home_team TEXT NOT NULL,
                 away_team TEXT NOT NULL,
                 predicted_spread REAL NOT NULL,
@@ -90,17 +93,38 @@ class SportsAnalyticsDB:
                 predicted_away_score REAL,
                 predicted_winner TEXT NOT NULL,
                 win_probability REAL NOT NULL,
+                win_probability_calibrated REAL,
                 confidence_score REAL NOT NULL,
                 confidence_level TEXT NOT NULL,
+                new_feature TEXT,
+                elo_diff REAL,
+                last5_win_pct_home REAL,
+                last5_win_pct_away REAL,
+                last5_point_diff_home REAL,
+                last5_point_diff_away REAL,
+                rest_days_home INTEGER,
+                rest_days_away INTEGER,
+                rest_diff REAL,
+                is_back_to_back_home INTEGER,
+                is_back_to_back_away INTEGER,
+                home_away_strength_diff REAL,
+                schedule_density_diff REAL,
+                pace_diff REAL,
+                injury_proxy REAL,
                 pred_std REAL,
                 ci_lower REAL,
                 ci_upper REAL,
+                actual_winner TEXT,
+                home_score INTEGER,
+                away_score INTEGER,
+                correct INTEGER,
                 epaa_weight REAL,
                 model_versions TEXT,
                 iteration_count INTEGER DEFAULT 1,
                 retraining_triggered BOOLEAN DEFAULT 0,
                 prediction_timestamp TEXT NOT NULL,
-                notes TEXT
+                notes TEXT,
+                model_version TEXT
             )
         """)
         
@@ -177,6 +201,8 @@ class SportsAnalyticsDB:
                 last_full_retrain TEXT,
                 model_version TEXT,
                 ensemble_weights TEXT,
+                baseline_snapshot TEXT,
+                baseline_locked INTEGER DEFAULT 0,
                 updated_at TEXT NOT NULL
             )
         """)
@@ -187,9 +213,59 @@ class SportsAnalyticsDB:
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Add timezone and lightweight outcome columns if missing.
+        # These are used by the notebook feedback loop and kept on predictions
+        # for fast querying without mandatory joins.
+        prediction_columns = [
+            ('game_date_utc', 'TEXT'),
+            ('game_date_pst', 'TEXT'),
+            ('game_date_local_date', 'TEXT'),
+            ('new_feature', 'TEXT'),
+            ('actual_winner', 'TEXT'),
+            ('home_score', 'INTEGER'),
+            ('away_score', 'INTEGER'),
+            ('correct', 'INTEGER'),
+            ('win_probability_calibrated', 'REAL'),
+            ('elo_diff', 'REAL'),
+            ('last5_win_pct_home', 'REAL'),
+            ('last5_win_pct_away', 'REAL'),
+            ('last5_point_diff_home', 'REAL'),
+            ('last5_point_diff_away', 'REAL'),
+            ('rest_days_home', 'INTEGER'),
+            ('rest_days_away', 'INTEGER'),
+            ('rest_diff', 'REAL'),
+            ('is_back_to_back_home', 'INTEGER'),
+            ('is_back_to_back_away', 'INTEGER'),
+            ('home_away_strength_diff', 'REAL'),
+            ('schedule_density_diff', 'REAL'),
+            ('pace_diff', 'REAL'),
+            ('injury_proxy', 'REAL'),
+            ('model_version', 'TEXT'),
+        ]
+        for col_name, col_type in prediction_columns:
+            try:
+                cursor.execute(f"ALTER TABLE predictions ADD COLUMN {col_name} {col_type}")
+            except sqlite3.OperationalError:
+                pass
+
+        # Keep baseline lock fields available for legacy DBs.
+        retrain_columns = [
+            ('baseline_snapshot', 'TEXT'),
+            ('baseline_locked', 'INTEGER DEFAULT 0'),
+        ]
+        for col_name, col_type in retrain_columns:
+            try:
+                cursor.execute(f"ALTER TABLE retraining_metadata ADD COLUMN {col_name} {col_type}")
+            except sqlite3.OperationalError:
+                pass
+
         # Create indexes for performance
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_predictions_game_id ON predictions(game_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_predictions_date ON predictions(game_date)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_predictions_date_local ON predictions(game_date_local_date)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_predictions_new_feature ON predictions(new_feature)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_predictions_elo_diff ON predictions(elo_diff)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_predictions_rest_diff ON predictions(rest_diff)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_predictions_teams ON predictions(home_team, away_team)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_results_prediction ON prediction_results(prediction_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_prediction ON model_history(prediction_id)")
@@ -205,16 +281,30 @@ class SportsAnalyticsDB:
         
         cursor.execute("""
             INSERT INTO predictions (
-                game_id, game_date, home_team, away_team,
+                game_id, game_date, game_date_utc, game_date_pst, game_date_local_date,
+                home_team, away_team,
                 predicted_spread, predicted_home_score, predicted_away_score,
                 predicted_winner, win_probability, confidence_score, confidence_level,
-                pred_std, ci_lower, ci_upper, epaa_weight, model_versions,
+                win_probability_calibrated,
+                new_feature,
+                elo_diff,
+                last5_win_pct_home, last5_win_pct_away,
+                last5_point_diff_home, last5_point_diff_away,
+                rest_days_home, rest_days_away, rest_diff,
+                is_back_to_back_home, is_back_to_back_away,
+                home_away_strength_diff, schedule_density_diff, pace_diff, injury_proxy,
+                pred_std, ci_lower, ci_upper,
+                actual_winner, home_score, away_score, correct,
+                epaa_weight, model_versions,
                 iteration_count, retraining_triggered, prediction_timestamp, notes,
                 model_version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             prediction_data.get('game_id'),
             prediction_data['game_date'],
+            prediction_data.get('game_date_utc'),
+            prediction_data.get('game_date_pst'),
+            prediction_data.get('game_date_local_date'),
             prediction_data['home_team'],
             prediction_data['away_team'],
             prediction_data['predicted_spread'],
@@ -224,9 +314,29 @@ class SportsAnalyticsDB:
             prediction_data['win_probability'],
             prediction_data['confidence_score'],
             prediction_data['confidence_level'],
+            prediction_data.get('win_probability_calibrated'),
+            prediction_data.get('new_feature'),
+            prediction_data.get('elo_diff'),
+            prediction_data.get('last5_win_pct_home'),
+            prediction_data.get('last5_win_pct_away'),
+            prediction_data.get('last5_point_diff_home'),
+            prediction_data.get('last5_point_diff_away'),
+            prediction_data.get('rest_days_home'),
+            prediction_data.get('rest_days_away'),
+            prediction_data.get('rest_diff'),
+            prediction_data.get('is_back_to_back_home'),
+            prediction_data.get('is_back_to_back_away'),
+            prediction_data.get('home_away_strength_diff'),
+            prediction_data.get('schedule_density_diff'),
+            prediction_data.get('pace_diff'),
+            prediction_data.get('injury_proxy'),
             prediction_data.get('pred_std'),
             prediction_data.get('ci_lower'),
             prediction_data.get('ci_upper'),
+            prediction_data.get('actual_winner'),
+            prediction_data.get('home_score'),
+            prediction_data.get('away_score'),
+            prediction_data.get('correct'),
             prediction_data.get('epaa_weight'),
             json.dumps(_to_json_serializable(prediction_data.get('model_versions', {}))),
             prediction_data.get('iteration_count', 1),
@@ -368,6 +478,120 @@ class SportsAnalyticsDB:
         
         row = cursor.fetchone()
         return dict(row) if row else None
+
+    def get_unsettled_predictions(self, days: int = 14) -> List[Dict]:
+        """Return recent predictions that still do not have actual outcomes."""
+        cursor = self.conn.cursor()
+        cutoff = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+
+        cursor.execute(
+            """
+            SELECT p.*
+            FROM predictions p
+            WHERE p.actual_winner IS NULL
+              AND COALESCE(p.game_date_local_date, p.game_date) >= ?
+            ORDER BY COALESCE(p.game_date_local_date, p.game_date), p.prediction_id
+            """,
+            (cutoff,),
+        )
+
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
+    def update_prediction_actual(
+        self,
+        prediction_id: int,
+        actual_winner: str,
+        home_score: int,
+        away_score: int,
+    ) -> None:
+        """Update lightweight actual fields on predictions table."""
+        cursor = self.conn.cursor()
+
+        cursor.execute(
+            "SELECT predicted_winner FROM predictions WHERE prediction_id = ?",
+            (prediction_id,),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return
+
+        predicted_winner = row['predicted_winner']
+        correct = 1 if predicted_winner == actual_winner else 0
+
+        cursor.execute(
+            """
+            UPDATE predictions
+            SET actual_winner = ?,
+                home_score = ?,
+                away_score = ?,
+                correct = ?
+            WHERE prediction_id = ?
+            """,
+            (actual_winner, int(home_score), int(away_score), correct, prediction_id),
+        )
+        self.conn.commit()
+
+    def get_recent_predictions_for_display(self, n: int = 20) -> List[Dict]:
+        """Return recent predictions in a notebook-friendly shape."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                COALESCE(game_date_pst, game_date) AS game_date_pst,
+                away_team || ' @ ' || home_team AS matchup,
+                predicted_winner,
+                actual_winner,
+                win_probability AS predicted_probability,
+                win_probability_calibrated AS predicted_probability_calibrated,
+                new_feature,
+                elo_diff,
+                rest_diff,
+                last5_win_pct_home,
+                last5_win_pct_away,
+                last5_point_diff_home,
+                last5_point_diff_away,
+                correct,
+                confidence_level,
+                predicted_spread
+            FROM predictions
+            ORDER BY COALESCE(game_date_local_date, game_date) DESC, prediction_id DESC
+            LIMIT ?
+            """,
+            (int(n),),
+        )
+        return [dict(r) for r in cursor.fetchall()]
+
+    def get_predictions_by_new_feature(
+        self,
+        feature_value: Optional[str] = None,
+        n: int = 100,
+    ) -> List[Dict]:
+        """Return recent predictions filtered by the scaffold new_feature value."""
+        cursor = self.conn.cursor()
+        if feature_value is None:
+            cursor.execute(
+                """
+                SELECT *
+                FROM predictions
+                ORDER BY COALESCE(game_date_local_date, game_date) DESC, prediction_id DESC
+                LIMIT ?
+                """,
+                (int(n),),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT *
+                FROM predictions
+                WHERE new_feature = ?
+                ORDER BY COALESCE(game_date_local_date, game_date) DESC, prediction_id DESC
+                LIMIT ?
+                """,
+                (str(feature_value), int(n)),
+            )
+
+        return [dict(r) for r in cursor.fetchall()]
     
     def get_model_history(self, prediction_id: int) -> List[Dict]:
         """Get all model actions for a prediction"""
@@ -519,6 +743,8 @@ class SportsAnalyticsDB:
         model_version: Optional[str] = None,
         full_retrain: bool = False,
         ensemble_weights: Optional[dict] = None,
+        baseline_snapshot: Optional[dict] = None,
+        baseline_locked: Optional[bool] = None,
     ) -> None:
         """Insert a new retraining metadata record.
 
@@ -546,19 +772,34 @@ class SportsAnalyticsDB:
             effective_weights_raw = json.dumps(ensemble_weights)
 
         # Preserve timestamps unless explicitly updated.
+        prev_count = int(prev.get('incremental_count') or 0)
         effective_last_incremental = (
-            now if not full_retrain else prev.get('last_incremental')
+            now
+            if (not full_retrain and int(incremental_count) != prev_count)
+            else prev.get('last_incremental')
         )
         effective_last_full_retrain = (
             now if full_retrain else prev.get('last_full_retrain')
         )
 
+        prev_baseline_snapshot_raw = prev.get('baseline_snapshot')
+        if baseline_snapshot is None:
+            effective_baseline_snapshot_raw = prev_baseline_snapshot_raw
+        else:
+            effective_baseline_snapshot_raw = json.dumps(_to_json_serializable(baseline_snapshot))
+
+        if baseline_locked is None:
+            effective_baseline_locked = int(prev.get('baseline_locked') or 0)
+        else:
+            effective_baseline_locked = int(bool(baseline_locked))
+
         cursor.execute(
             """
             INSERT INTO retraining_metadata
                 (incremental_count, last_incremental, last_full_retrain,
-                 model_version, ensemble_weights, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+                 model_version, ensemble_weights, baseline_snapshot,
+                 baseline_locked, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 int(incremental_count),
@@ -566,6 +807,8 @@ class SportsAnalyticsDB:
                 effective_last_full_retrain,
                 effective_model_version,
                 effective_weights_raw,
+                effective_baseline_snapshot_raw,
+                effective_baseline_locked,
                 now,
             ),
         )

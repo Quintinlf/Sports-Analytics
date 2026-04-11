@@ -26,6 +26,9 @@ tqdm>=4.62.0
 jupyter>=1.0.0
 ipykernel>=6.0.0
 
+# Experiment Tracking
+mlflow>=2.13.0
+
 # Optional: GPU-accelerated GPs (requires CUDA)
 # gpytorch>=1.6.0  # Uncomment if you have GPU and want scalable GPs
 # torch>=1.10.0     # Required for GPyTorch

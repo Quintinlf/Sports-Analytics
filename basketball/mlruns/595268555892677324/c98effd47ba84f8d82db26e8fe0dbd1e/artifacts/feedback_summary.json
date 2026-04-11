@@ -1,0 +1,203 @@
+{
+  "n_total": 36,
+  "headline": "Accuracy: 52.8% over last 36 settled predictions",
+  "accuracy_pct": 52.77777777777778,
+  "brier_score": 0.29058949083333335,
+  "mae_spread": 13.397222222222222,
+  "by_confidence": {
+    "MEDIUM": {
+      "count": 36,
+      "accuracy": 0.5277777777777778,
+      "avg_predicted_probability": 0.6115361111111111
+    }
+  },
+  "by_new_feature": {
+    "spread_bucket:coin_flip|conf:MEDIUM": {
+      "count": 15,
+      "accuracy": 0.8,
+      "brier_score": 0.221177536,
+      "mae_spread": 6.271333333333334,
+      "rolling_accuracy_latest": 0.8,
+      "calibration": [
+        {
+          "bucket": "(0.4, 0.6]",
+          "count": 15,
+          "avg_predicted_probability": 0.5148666666666667,
+          "actual_home_win_rate": 0.4666666666666667
+        }
+      ]
+    },
+    "spread_bucket:heavy_favorite|conf:MEDIUM": {
+      "count": 5,
+      "accuracy": 0.2,
+      "brier_score": 0.40605056,
+      "mae_spread": 19.71,
+      "rolling_accuracy_latest": 0.2,
+      "calibration": [
+        {
+          "bucket": "(0.6, 0.8]",
+          "count": 5,
+          "avg_predicted_probability": 0.7063200000000001,
+          "actual_home_win_rate": 0.2
+        }
+      ]
+    },
+    "spread_bucket:moderate_favorite|conf:MEDIUM": {
+      "count": 7,
+      "accuracy": 0.5714285714285714,
+      "brier_score": 0.23908896714285716,
+      "mae_spread": 16.414285714285718,
+      "rolling_accuracy_latest": 0.5714285714285714,
+      "calibration": [
+        {
+          "bucket": "(0.4, 0.6]",
+          "count": 4,
+          "avg_predicted_probability": 0.588925,
+          "actual_home_win_rate": 0.25
+        },
+        {
+          "bucket": "(0.6, 0.8]",
+          "count": 3,
+          "avg_predicted_probability": 0.6076,
+          "actual_home_win_rate": 1.0
+        }
+      ]
+    },
+    "spread_bucket:underdog|conf:MEDIUM": {
+      "count": 9,
+      "accuracy": 0.2222222222222222,
+      "brier_score": 0.38218700666666666,
+      "mae_spread": 19.42,
+      "rolling_accuracy_latest": 0.2222222222222222,
+      "calibration": [
+        {
+          "bucket": "(0.2, 0.4]",
+          "count": 9,
+          "avg_predicted_probability": 0.32935555555555557,
+          "actual_home_win_rate": 0.7777777777777778
+        }
+      ]
+    }
+  },
+  "feature_impact": {
+    "spread_bucket:coin_flip|conf:MEDIUM": {
+      "count": 15,
+      "accuracy": 0.8,
+      "brier_score": 0.221177536,
+      "mae_spread": 6.271333333333334,
+      "rolling_accuracy_latest": 0.8,
+      "calibration": [
+        {
+          "bucket": "(0.4, 0.6]",
+          "count": 15,
+          "avg_predicted_probability": 0.5148666666666667,
+          "actual_home_win_rate": 0.4666666666666667
+        }
+      ],
+      "color": "#16a34a"
+    },
+    "spread_bucket:heavy_favorite|conf:MEDIUM": {
+      "count": 5,
+      "accuracy": 0.2,
+      "brier_score": 0.40605056,
+      "mae_spread": 19.71,
+      "rolling_accuracy_latest": 0.2,
+      "calibration": [
+        {
+          "bucket": "(0.6, 0.8]",
+          "count": 5,
+          "avg_predicted_probability": 0.7063200000000001,
+          "actual_home_win_rate": 0.2
+        }
+      ],
+      "color": "#dc2626"
+    },
+    "spread_bucket:moderate_favorite|conf:MEDIUM": {
+      "count": 7,
+      "accuracy": 0.5714285714285714,
+      "brier_score": 0.23908896714285716,
+      "mae_spread": 16.414285714285718,
+      "rolling_accuracy_latest": 0.5714285714285714,
+      "calibration": [
+        {
+          "bucket": "(0.4, 0.6]",
+          "count": 4,
+          "avg_predicted_probability": 0.588925,
+          "actual_home_win_rate": 0.25
+        },
+        {
+          "bucket": "(0.6, 0.8]",
+          "count": 3,
+          "avg_predicted_probability": 0.6076,
+          "actual_home_win_rate": 1.0
+        }
+      ],
+      "color": "#16a34a"
+    },
+    "spread_bucket:underdog|conf:MEDIUM": {
+      "count": 9,
+      "accuracy": 0.2222222222222222,
+      "brier_score": 0.38218700666666666,
+      "mae_spread": 19.42,
+      "rolling_accuracy_latest": 0.2222222222222222,
+      "calibration": [
+        {
+          "bucket": "(0.2, 0.4]",
+          "count": 9,
+          "avg_predicted_probability": 0.32935555555555557,
+          "actual_home_win_rate": 0.7777777777777778
+        }
+      ],
+      "color": "#dc2626"
+    }
+  },
+  "calibration": [
+    {
+      "bucket": "(0.2, 0.3]",
+      "count": 3,
+      "avg_predicted_probability": 0.29140000000000005,
+      "actual_home_win_rate": 0.6666666666666666
+    },
+    {
+      "bucket": "(0.3, 0.4]",
+      "count": 6,
+      "avg_predicted_probability": 0.34833333333333333,
+      "actual_home_win_rate": 0.8333333333333334
+    },
+    {
+      "bucket": "(0.4, 0.5]",
+      "count": 5,
+      "avg_predicted_probability": 0.44536,
+      "actual_home_win_rate": 0.0
+    },
+    {
+      "bucket": "(0.5, 0.6]",
+      "count": 14,
+      "avg_predicted_probability": 0.5608500000000001,
+      "actual_home_win_rate": 0.5714285714285714
+    },
+    {
+      "bucket": "(0.6, 0.7]",
+      "count": 5,
+      "avg_predicted_probability": 0.63936,
+      "actual_home_win_rate": 0.6
+    },
+    {
+      "bucket": "(0.7, 0.8]",
+      "count": 3,
+      "avg_predicted_probability": 0.7192,
+      "actual_home_win_rate": 0.3333333333333333
+    }
+  ],
+  "retrain_progress": {
+    "current_count": 5,
+    "progress_count": 5,
+    "retrain_every_n": 7,
+    "remaining_batches": 2,
+    "progress_pct": 71.42857142857143,
+    "ready_to_retrain": false,
+    "model_version": null,
+    "last_full_retrain": null,
+    "last_incremental": "2026-03-21T13:49:53.089466"
+  }
+}

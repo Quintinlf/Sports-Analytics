@@ -74,7 +74,7 @@ class GaussianProcessPredictor:
     # ------------------------------------------------------------------
     def fit(self, X, y, verbose: bool = True, auto_save: bool = True):
         if verbose:
-            print(f"  Training GP ({self.kernel_type})...")
+            print(f"  Training GP ({self.kernel_type})...", flush=True)
 
         if hasattr(X, 'columns'):
             self.feature_names = X.columns.tolist()
@@ -86,8 +86,8 @@ class GaussianProcessPredictor:
 
         if verbose:
             lml = self.model.log_marginal_likelihood(self.model.kernel_.theta)
-            print(f"    Kernel: {self.model.kernel_}")
-            print(f"    Log-marginal-likelihood: {lml:.2f}")
+            print(f"    Kernel: {self.model.kernel_}", flush=True)
+            print(f"    Log-marginal-likelihood: {lml:.2f}", flush=True)
 
         if auto_save:
             os.makedirs(_MODEL_DIR, exist_ok=True)
@@ -95,7 +95,7 @@ class GaussianProcessPredictor:
             path = os.path.join(_MODEL_DIR, f'gp_{self.kernel_type}_{ts}.pkl')
             self.save(path)
             if verbose:
-                print(f"    Auto-saved -> {os.path.basename(path)}")
+                print(f"    Auto-saved -> {os.path.basename(path)}", flush=True)
 
         return self
 

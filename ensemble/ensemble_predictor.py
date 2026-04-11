@@ -18,6 +18,8 @@ from machine_learning.gp_model import GaussianProcessPredictor
 from machine_learning.lightgbm_models import LGBMWinPredictor, LGBMQuantilePredictor
 from machine_learning.elo_model import EloModel
 from ensemble.ensemble_weights import WeightManager, default_weights
+from data.database.database_handler import SportsAnalyticsDB
+from evaluators.calibration import CalibrationModel
 
 
 class EnsemblePredictor:
@@ -45,6 +47,12 @@ class EnsemblePredictor:
         self.lgbm_win: Optional[LGBMWinPredictor] = None
         self.lgbm_quantile: Optional[LGBMQuantilePredictor] = None
         self.elo: Optional[EloModel] = None
+        self._calibrator: Optional[CalibrationModel] = None
+
+        try:
+            self._calibrator = CalibrationModel.load()
+        except Exception:
+            self._calibrator = None
 
     # ------------------------------------------------------------------
     # Loading helpers
@@ -64,6 +72,31 @@ class EnsemblePredictor:
         self.elo = EloModel.load(elo_path)
         # Refresh weights every time models are (re)loaded
         self.weights = self._weight_manager.get_weights()
+
+    def fit_calibrator_from_db(
+        self,
+        db_path: str = 'sports_analytics.db',
+        limit: int = 200,
+        min_samples: int = 10,
+        save: bool = True,
+    ) -> Dict[str, float]:
+        """Fit calibrator on recent settled predictions and optionally persist it."""
+        with SportsAnalyticsDB(db_path) as db:
+            calibrator = CalibrationModel().fit_recent(
+                db=db,
+                limit=int(limit),
+                min_samples=int(min_samples),
+            )
+
+        self._calibrator = calibrator if calibrator.is_fitted else None
+        if self._calibrator is not None and save:
+            self._calibrator.save()
+
+        return {
+            'fitted': 1.0 if self._calibrator is not None else 0.0,
+            'limit': float(limit),
+            'min_samples': float(min_samples),
+        }
 
     # ------------------------------------------------------------------
     # Core prediction
@@ -151,6 +184,10 @@ class EnsemblePredictor:
             blended_spread /= total_weight
 
         blended_win_prob = float(np.clip(blended_win_prob, 0.0, 1.0))
+        calibrated_win_prob = blended_win_prob
+        if self._calibrator is not None and self._calibrator.is_fitted:
+            calibrated_win_prob = float(self._calibrator.calibrate(np.array([blended_win_prob]))[0])
+            calibrated_win_prob = float(np.clip(calibrated_win_prob, 0.0, 1.0))
 
         # Uncertainty from GP std + quantile width
         q10 = contributions['lgbm_quantile'].get('q10', blended_spread - 6)
@@ -162,6 +199,7 @@ class EnsemblePredictor:
 
         return {
             'win_prob': round(blended_win_prob, 4),
+            'win_prob_calibrated': round(calibrated_win_prob, 4),
             'spread': round(float(blended_spread), 2),
             'q10': round(float(q10), 2),
             'q90': round(float(q90), 2),
