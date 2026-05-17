@@ -372,9 +372,9 @@ evaluators/
 
 ### Quick predictions (notebook cell, no API calls):
 1. Open `machine_learning/basketball_model.ipynb`
-2. Update the `GAME_DATE` string and `vegas_lines` dict with tomorrow's games and DraftKings lines
-3. Update any `team_profiles` entries where a key player is injured (reduce `str` and `net_rtg` accordingly)
-4. Run cell 87 — HTML report auto-saves to the `machine_learning/` folder
+2. (Optional) Use the **Manual prediction form (starter)** section to add custom matchups and enable `USE_FORM_GAMES`
+3. Run the prediction cell to score either manual form games or the live upcoming schedule
+4. Review the HTML output report in-notebook (and saved output when configured)
 
 ### Full ML pipeline (highest accuracy):
 ```bash
