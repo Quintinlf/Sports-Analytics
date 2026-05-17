@@ -1,0 +1,62 @@
+name: Daily NBA Pipeline
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-nba-pipeline
+  cancel-in-progress: false
+
+jobs:
+  run-daily-notebook:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Execute notebook end-to-end
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          jupyter nbconvert \
+            --to notebook \
+            --execute \
+            --inplace basketball/basketball_model.ipynb \
+            --ExecutePreprocessor.timeout=7200
+
+      - name: Commit generated updates
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+
+          git add basketball/basketball_model.ipynb
+          git add sports_analytics.db
+          git add machine_learning/models || true
+          git add basketball/machine_learning/models || true
+
+          if git diff --cached --quiet; then
+            echo "No tracked output changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore: daily automated NBA pipeline run"
+          git push

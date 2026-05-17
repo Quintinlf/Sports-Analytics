@@ -34,7 +34,7 @@ mlflow>=2.13.0
 # torch>=1.10.0     # Required for GPyTorch
 
 # NBA Data (if using API)
-# nba_api>=1.1.0  # Uncomment if fetching live NBA data
+nba_api>=1.1.0
 
 # Notes:
 # - scikit-learn's Gaussian Process module is included in the base package
