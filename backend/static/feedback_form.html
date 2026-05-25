@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MLB Analyst Feedback</title>
+  <style>
+    :root {
+      --bg: #f6f5f0;
+      --ink: #1f2937;
+      --accent: #0f766e;
+      --soft: #e2e8f0;
+      --warn: #b91c1c;
+      --card: #ffffff;
+      --shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Georgia", "Times New Roman", serif;
+      color: var(--ink);
+      background: radial-gradient(circle at top left, #fff7ed 0%, #f6f5f0 45%, #eef2f7 100%);
+      padding: 24px;
+    }
+
+    header {
+      max-width: 980px;
+      margin: 0 auto 24px auto;
+      padding: 18px 22px;
+      background: linear-gradient(130deg, #0f766e, #0ea5a8);
+      border-radius: 14px;
+      color: #f8fafc;
+      box-shadow: var(--shadow);
+    }
+
+    header h1 {
+      margin: 0 0 8px 0;
+      font-size: 26px;
+      letter-spacing: 0.4px;
+    }
+
+    header p {
+      margin: 0;
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    .container {
+      max-width: 980px;
+      margin: 0 auto;
+      display: grid;
+      gap: 18px;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 18px 20px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--soft);
+    }
+
+    .card h2 {
+      margin: 0 0 12px 0;
+      font-size: 18px;
+      color: #0f172a;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    select, textarea, input[type="text"], input[type="range"] {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #cbd5f5;
+      background: #f8fafc;
+      font-size: 14px;
+    }
+
+    textarea { min-height: 80px; }
+
+    .grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .grid.two {
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      font-size: 13px;
+    }
+
+    .cta {
+      background: var(--accent);
+      color: #ffffff;
+      border: none;
+      padding: 12px 18px;
+      border-radius: 12px;
+      font-size: 15px;
+      cursor: pointer;
+      width: 100%;
+      font-weight: 700;
+    }
+
+    .status {
+      margin-top: 12px;
+      font-size: 14px;
+    }
+
+    .status.error { color: var(--warn); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>MLB Analyst Feedback</h1>
+    <p>Submit feedback after predictions are generated and before games begin.</p>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>Game Selection</h2>
+      <div class="grid two">
+        <div>
+          <label for="analyst_id">Analyst</label>
+          <select id="analyst_id">
+            <option value="">Select analyst</option>
+            <option value="lamar">Lamar (sports logic)</option>
+            <option value="anderson">Anderson (sports logic)</option>
+            <option value="luis">Luis (sports logic)</option>
+            <option value="alex">Alex (betting logic)</option>
+          </select>
+        </div>
+        <div>
+          <label for="prediction_id">Game</label>
+          <select id="prediction_id"></select>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Confidence & Disagreement</h2>
+      <div class="grid">
+        <div>
+          <label for="confidence_assessment">Confidence level assessment</label>
+          <select id="confidence_assessment">
+            <option value="">Select</option>
+            <option value="agree_high">Agree - HIGH</option>
+            <option value="agree_medium">Agree - MEDIUM</option>
+            <option value="agree_low">Agree - LOW</option>
+            <option value="should_be_higher">Should be HIGHER</option>
+            <option value="should_be_lower">Should be LOWER</option>
+          </select>
+        </div>
+        <div>
+          <label for="confidence_reasoning">Why (if disagreed)</label>
+          <textarea id="confidence_reasoning"></textarea>
+        </div>
+        <div>
+          <label for="spread_disagreement">Spread disagreement</label>
+          <select id="spread_disagreement">
+            <option value="">Select</option>
+            <option value="completely_agree">Completely agree</option>
+            <option value="mostly_agree">Mostly agree</option>
+            <option value="disagree_1_to_2_points">Disagree 1-2 points</option>
+            <option value="disagree_3_plus_points">Disagree 3+ points</option>
+            <option value="no_opinion">No opinion</option>
+          </select>
+        </div>
+        <div>
+          <label for="spread_disagreement_reason">Why (if disagreed)</label>
+          <textarea id="spread_disagreement_reason"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Baseball Logic Insights</h2>
+      <div class="grid">
+        <div>
+          <label>Pitcher concerns</label>
+          <div class="chip-row" id="pitcher_concerns"></div>
+        </div>
+        <div>
+          <label for="pitcher_details">Details</label>
+          <textarea id="pitcher_details"></textarea>
+        </div>
+        <div>
+          <label for="lineup_impact">Lineup impact</label>
+          <select id="lineup_impact">
+            <option value="">Select</option>
+            <option value="no_changes">No changes</option>
+            <option value="key_player_out">Key player out</option>
+            <option value="key_player_back">Key player back</option>
+            <option value="backup_heavy_lineup">Backup-heavy lineup</option>
+          </select>
+        </div>
+        <div>
+          <label for="lineup_details">Lineup details</label>
+          <textarea id="lineup_details"></textarea>
+        </div>
+        <div>
+          <label for="rest_advantage">Rest advantage</label>
+          <select id="rest_advantage">
+            <option value="">Select</option>
+            <option value="no_advantage">No advantage</option>
+            <option value="home_rested_1plus_days">Home team rested</option>
+            <option value="away_rested_1plus_days">Away team rested</option>
+          </select>
+        </div>
+        <div>
+          <label>Weather impact</label>
+          <div class="chip-row" id="weather_impact"></div>
+        </div>
+        <div>
+          <label for="weather_magnitude">Weather magnitude (-5 to +5)</label>
+          <input type="range" id="weather_magnitude" min="-5" max="5" step="1" value="0" />
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Betting Market Observations</h2>
+      <div class="grid">
+        <div>
+          <label for="market_line_behavior">Market line movement</label>
+          <select id="market_line_behavior">
+            <option value="">Select</option>
+            <option value="no_movement">No movement</option>
+            <option value="moved_toward_prediction">Moved toward prediction</option>
+            <option value="moved_against_prediction">Moved against prediction</option>
+            <option value="sharp_money_detected">Sharp money detected</option>
+          </select>
+        </div>
+        <div>
+          <label for="market_line_details">Line movement details</label>
+          <textarea id="market_line_details"></textarea>
+        </div>
+        <div>
+          <label for="model_vs_market">Model vs market alignment</label>
+          <select id="model_vs_market">
+            <option value="">Select</option>
+            <option value="well_aligned">Well aligned</option>
+            <option value="model_underconfident">Model underconfident</option>
+            <option value="model_overconfident">Model overconfident</option>
+            <option value="arbitrage_opportunity">Arbitrage opportunity</option>
+          </select>
+        </div>
+        <div>
+          <label for="calibration_magnitude">Calibration magnitude</label>
+          <select id="calibration_magnitude">
+            <option value="">Select</option>
+            <option value="minor_1_to_2_pct">Minor (1-2%)</option>
+            <option value="moderate_3_to_5_pct">Moderate (3-5%)</option>
+            <option value="significant_6_plus_pct">Significant (6%+)</option>
+          </select>
+        </div>
+        <div>
+          <label for="calibration_commentary">Calibration commentary</label>
+          <textarea id="calibration_commentary"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Missing Features</h2>
+      <div class="grid">
+        <div>
+          <label>Missing data</label>
+          <div class="chip-row" id="missing_data"></div>
+        </div>
+        <div>
+          <label for="feature_description">Feature description</label>
+          <textarea id="feature_description"></textarea>
+        </div>
+        <div>
+          <label for="feature_impact_estimate">Impact estimate</label>
+          <select id="feature_impact_estimate">
+            <option value="">Select</option>
+            <option value="game_changer">Game-changer</option>
+            <option value="moderate_improvement">Moderate improvement</option>
+            <option value="minor_edge">Minor edge</option>
+            <option value="speculative">Speculative</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>General Feedback</h2>
+      <div class="grid">
+        <div>
+          <label for="general_comments">Additional comments</label>
+          <textarea id="general_comments"></textarea>
+        </div>
+        <div>
+          <label for="pattern_observation">Pattern observations</label>
+          <textarea id="pattern_observation"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <button class="cta" id="submit_btn">Submit Feedback</button>
+      <div class="status" id="status"></div>
+    </section>
+  </main>
+
+  <script>
+    const API_BASE = "";
+
+    const multiSelectConfig = {
+      pitcher_concerns: [
+        { id: "no_concerns", label: "No concerns" },
+        { id: "starter_fatigue", label: "Starter fatigue" },
+        { id: "starter_injury_risk", label: "Starter injury risk" },
+        { id: "bullpen_weakness", label: "Bullpen weakness" },
+        { id: "bullpen_strength", label: "Bullpen strength" }
+      ],
+      weather_impact: [
+        { id: "no_weather_factor", label: "No weather factor" },
+        { id: "cold_slows_flyballs", label: "Cold" },
+        { id: "hot_increases_distance", label: "Hot" },
+        { id: "wind_in", label: "Wind in" },
+        { id: "wind_out", label: "Wind out" },
+        { id: "wind_left", label: "Wind left" },
+        { id: "wind_right", label: "Wind right" },
+        { id: "humidity_high", label: "Humidity high" },
+        { id: "rain_delay_risk", label: "Rain risk" }
+      ],
+      missing_data: [
+        { id: "no_missing_features", label: "No missing features" },
+        { id: "pitcher_metric", label: "Pitcher metric" },
+        { id: "position_player_metric", label: "Position player metric" },
+        { id: "weather_field_metric", label: "Weather/field metric" },
+        { id: "market_metric", label: "Market metric" },
+        { id: "other", label: "Other" }
+      ]
+    };
+
+    function renderMultiSelect(containerId, options) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = "";
+      options.forEach(opt => {
+        const label = document.createElement("label");
+        label.className = "chip";
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.value = opt.id;
+        input.name = containerId;
+        label.appendChild(input);
+        label.appendChild(document.createTextNode(opt.label));
+        container.appendChild(label);
+      });
+    }
+
+    function getMultiSelectValues(name) {
+      const inputs = Array.from(document.querySelectorAll(`input[name='${name}']:checked`));
+      return inputs.map(input => input.value);
+    }
+
+    async function loadPredictions() {
+      const resp = await fetch(`${API_BASE}/api/v1/predictions/today`);
+      const data = await resp.json();
+      const select = document.getElementById("prediction_id");
+      select.innerHTML = "<option value=''>Select game</option>";
+      data.games.forEach(game => {
+        const opt = document.createElement("option");
+        opt.value = game.prediction_id;
+        opt.textContent = `${game.away_team} @ ${game.home_team} (${game.game_date})`;
+        opt.dataset.gameId = game.game_id || "";
+        select.appendChild(opt);
+      });
+    }
+
+    function getAnalystRole(analystId) {
+      if (analystId === "alex") {
+        return "betting_logic";
+      }
+      return "sports_logic";
+    }
+
+    function buildPayload() {
+      const analystId = document.getElementById("analyst_id").value;
+      const predictionSelect = document.getElementById("prediction_id");
+      const predictionId = predictionSelect.value;
+      const gameId = predictionSelect.selectedOptions[0]?.dataset.gameId || "";
+
+      return {
+        prediction_id: predictionId,
+        game_id: gameId,
+        analyst_id: analystId,
+        analyst_role: getAnalystRole(analystId),
+        form_version: "1.0",
+        form_responses: {
+          confidence_calibration: {
+            confidence_assessment: document.getElementById("confidence_assessment").value,
+            confidence_reasoning: document.getElementById("confidence_reasoning").value,
+            spread_disagreement: document.getElementById("spread_disagreement").value,
+            spread_disagreement_reason: document.getElementById("spread_disagreement_reason").value
+          },
+          baseball_logic: {
+            pitcher_concerns: getMultiSelectValues("pitcher_concerns"),
+            pitcher_details: document.getElementById("pitcher_details").value,
+            lineup_impact: document.getElementById("lineup_impact").value,
+            lineup_details: document.getElementById("lineup_details").value,
+            rest_advantage: document.getElementById("rest_advantage").value,
+            weather_impact: getMultiSelectValues("weather_impact"),
+            weather_magnitude: Number(document.getElementById("weather_magnitude").value)
+          },
+          betting_logic: {
+            market_line_behavior: document.getElementById("market_line_behavior").value,
+            market_line_details: document.getElementById("market_line_details").value,
+            model_vs_market: document.getElementById("model_vs_market").value,
+            calibration_magnitude: document.getElementById("calibration_magnitude").value,
+            calibration_commentary: document.getElementById("calibration_commentary").value
+          },
+          missing_features: {
+            missing_data: getMultiSelectValues("missing_data"),
+            feature_description: document.getElementById("feature_description").value,
+            feature_impact_estimate: document.getElementById("feature_impact_estimate").value
+          },
+          general_feedback: {
+            general_comments: document.getElementById("general_comments").value,
+            pattern_observation: document.getElementById("pattern_observation").value
+          }
+        }
+      };
+    }
+
+    async function submitFeedback() {
+      const status = document.getElementById("status");
+      status.textContent = "";
+      status.className = "status";
+
+      const payload = buildPayload();
+      if (!payload.analyst_id || !payload.prediction_id) {
+        status.textContent = "Select analyst and game before submitting.";
+        status.classList.add("error");
+        return;
+      }
+
+      const resp = await fetch(`${API_BASE}/api/v1/feedback/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        status.textContent = data.detail || "Submission failed.";
+        status.classList.add("error");
+        return;
+      }
+
+      const data = await resp.json();
+      status.textContent = `Submitted! Feedback ID: ${data.feedback_id}`;
+      status.classList.remove("error");
+    }
+
+    document.getElementById("submit_btn").addEventListener("click", submitFeedback);
+
+    renderMultiSelect("pitcher_concerns", multiSelectConfig.pitcher_concerns);
+    renderMultiSelect("weather_impact", multiSelectConfig.weather_impact);
+    renderMultiSelect("missing_data", multiSelectConfig.missing_data);
+    loadPredictions();
+  </script>
+</body>
+</html>

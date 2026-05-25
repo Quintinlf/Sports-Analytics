@@ -29,6 +29,12 @@ ipykernel>=6.0.0
 # Experiment Tracking
 mlflow>=2.13.0
 
+# Web API + PostgreSQL (MLB analyst feedback)
+fastapi>=0.111.0
+uvicorn>=0.30.0
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+
 # Optional: GPU-accelerated GPs (requires CUDA)
 # gpytorch>=1.6.0  # Uncomment if you have GPU and want scalable GPs
 # torch>=1.10.0     # Required for GPyTorch
