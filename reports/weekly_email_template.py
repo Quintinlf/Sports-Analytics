@@ -13,6 +13,8 @@ def _format_percent(value: float) -> str:
 def render_weekly_report(
     metrics: Dict[str, Any],
     failures: List[Dict[str, Any]],
+  failure_patterns: List[str],
+  feature_targets: List[str],
     feedback_form_url: str,
 ) -> str:
     generated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
@@ -22,16 +24,27 @@ def render_weekly_report(
         for failure in failures:
             matchup = f"{failure.get('away_team', 'N/A')} at {failure.get('home_team', 'N/A')}"
             prob = float(failure.get("win_probability") or 0.0)
+        prediction_id = escape(str(failure.get("prediction_id", "")))
+        review_link = f"{feedback_form_url}?prediction_id={prediction_id}" if prediction_id else feedback_form_url
             failures_rows += (
                 "<tr>"
                 f"<td>{escape(str(failure.get('game_date', '')))}</td>"
                 f"<td>{escape(matchup)}</td>"
                 f"<td>{prob:.2f}</td>"
-                f"<td>{escape(str(failure.get('confidence_level', 'N/A')))}</td>"
+          f"<td>{escape(str(failure.get('confidence_level', 'N/A')))}</td>"
+          f"<td><a href=\"{review_link}\">Review</a></td>"
                 "</tr>"
             )
     else:
-        failures_rows = "<tr><td colspan=\"4\">No high-confidence misses this week.</td></tr>"
+      failures_rows = "<tr><td colspan=\"5\">No high-confidence misses this week.</td></tr>"
+
+    pattern_items = "".join(
+      f"<li>{escape(item)}</li>" for item in failure_patterns
+    ) or "<li>No patterns identified.</li>"
+
+    target_items = "".join(
+      f"<li>{escape(item)}</li>" for item in feature_targets
+    ) or "<li>No feature targets identified.</li>"
 
     return f"""
 <!DOCTYPE html>
@@ -51,6 +64,7 @@ def render_weekly_report(
     table {{ width: 100%; border-collapse: collapse; margin-top: 12px; }}
     th, td {{ padding: 8px; border-bottom: 1px solid #e2e8f0; text-align: left; }}
     th {{ background: #f8fafc; font-size: 12px; color: #334155; }}
+    ul {{ margin: 10px 0 0 18px; color: #1f2937; }}
     .cta {{ margin-top: 20px; }}
     .cta a {{ display: inline-block; padding: 10px 16px; border-radius: 8px; background: #0f766e; color: #fff; text-decoration: none; }}
   </style>
@@ -75,12 +89,23 @@ def render_weekly_report(
           <th>Matchup</th>
           <th>Win Prob</th>
           <th>Confidence</th>
+          <th>Review</th>
         </tr>
       </thead>
       <tbody>
         {failures_rows}
       </tbody>
     </table>
+
+    <h2>Recurring Failure Patterns</h2>
+    <ul>
+      {pattern_items}
+    </ul>
+
+    <h2>Feature Engineering Targets</h2>
+    <ul>
+      {target_items}
+    </ul>
 
     <div class=\"cta\">
       <p>Share feedback to improve next week's model decisions:</p>

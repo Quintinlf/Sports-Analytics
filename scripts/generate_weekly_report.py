@@ -127,6 +127,40 @@ def _identify_failures(df: pd.DataFrame) -> List[Dict[str, Any]]:
     return top.to_dict("records")
 
 
+def _derive_patterns(df: pd.DataFrame, failures: List[Dict[str, Any]]) -> List[str]:
+    patterns: List[str] = []
+    total = len(df)
+    if total == 0:
+        return ["Not enough data to identify patterns."]
+
+    missing_actuals = df["actual_home_score"].isna().sum()
+    if missing_actuals:
+        patterns.append(f"{missing_actuals} games missing final scores.")
+
+    if failures:
+        high_prob = [f for f in failures if (f.get("win_probability") or 0) >= 0.65]
+        if high_prob:
+            patterns.append("High-confidence bucket (>=0.65) produced misses.")
+        patterns.append(f"{len(failures)} top failure(s) in the last 7 days.")
+    else:
+        patterns.append("No high-confidence failures this week.")
+
+    return patterns
+
+
+def _derive_feature_targets(df: pd.DataFrame, failures: List[Dict[str, Any]]) -> List[str]:
+    targets: List[str] = []
+    if not failures:
+        return ["No urgent feature gaps identified from failures."]
+
+    avg_prob = sum(float(f.get("win_probability") or 0) for f in failures) / max(len(failures), 1)
+    if avg_prob >= 0.65:
+        targets.append("Recalibrate high-confidence probabilities (>=0.65).")
+    targets.append("Audit bullpen usage and late lineup confirmations for missed games.")
+    targets.append("Evaluate park and travel-rest adjustments for close spreads.")
+    return targets
+
+
 def main() -> int:
     try:
         database_url = _require_env("DATABASE_URL")
@@ -136,10 +170,14 @@ def main() -> int:
         df = _fetch_weekly_predictions(engine)
         metrics = _compute_metrics(df)
         failures = _identify_failures(df)
+        failure_patterns = _derive_patterns(df, failures)
+        feature_targets = _derive_feature_targets(df, failures)
 
         html = render_weekly_report(
             metrics=metrics,
             failures=failures,
+            failure_patterns=failure_patterns,
+            feature_targets=feature_targets,
             feedback_form_url=feedback_url,
         )
 

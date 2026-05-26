@@ -159,163 +159,206 @@
     </section>
 
     <section class="card">
-      <h2>Confidence & Disagreement</h2>
-      <div class="grid">
+      <h2>Postgame Summary</h2>
+      <div class="grid two">
         <div>
-          <label for="confidence_assessment">Confidence level assessment</label>
-          <select id="confidence_assessment">
-            <option value="">Select</option>
-            <option value="agree_high">Agree - HIGH</option>
-            <option value="agree_medium">Agree - MEDIUM</option>
-            <option value="agree_low">Agree - LOW</option>
-            <option value="should_be_higher">Should be HIGHER</option>
-            <option value="should_be_lower">Should be LOWER</option>
+          <label for="review_stage">Review stage</label>
+          <select id="review_stage">
+            <option value="post_game">Post-game</option>
+            <option value="pre_game">Pre-game</option>
           </select>
         </div>
         <div>
-          <label for="confidence_reasoning">Why (if disagreed)</label>
-          <textarea id="confidence_reasoning"></textarea>
-        </div>
-        <div>
-          <label for="spread_disagreement">Spread disagreement</label>
-          <select id="spread_disagreement">
+          <label for="outcome_correct">Winner outcome</label>
+          <select id="outcome_correct">
             <option value="">Select</option>
-            <option value="completely_agree">Completely agree</option>
-            <option value="mostly_agree">Mostly agree</option>
-            <option value="disagree_1_to_2_points">Disagree 1-2 points</option>
-            <option value="disagree_3_plus_points">Disagree 3+ points</option>
-            <option value="no_opinion">No opinion</option>
+            <option value="correct_winner">Correct winner</option>
+            <option value="wrong_winner">Wrong winner</option>
+            <option value="unknown">Unknown</option>
           </select>
         </div>
         <div>
-          <label for="spread_disagreement_reason">Why (if disagreed)</label>
-          <textarea id="spread_disagreement_reason"></textarea>
-        </div>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Baseball Logic Insights</h2>
-      <div class="grid">
-        <div>
-          <label>Pitcher concerns</label>
-          <div class="chip-row" id="pitcher_concerns"></div>
-        </div>
-        <div>
-          <label for="pitcher_details">Details</label>
-          <textarea id="pitcher_details"></textarea>
-        </div>
-        <div>
-          <label for="lineup_impact">Lineup impact</label>
-          <select id="lineup_impact">
+          <label for="spread_accuracy">Spread accuracy</label>
+          <select id="spread_accuracy">
             <option value="">Select</option>
-            <option value="no_changes">No changes</option>
-            <option value="key_player_out">Key player out</option>
-            <option value="key_player_back">Key player back</option>
-            <option value="backup_heavy_lineup">Backup-heavy lineup</option>
+            <option value="within_1">Within 1</option>
+            <option value="within_2">Within 2</option>
+            <option value="within_3">Within 3</option>
+            <option value="off_by_3_plus">Off by 3+</option>
+            <option value="not_applicable">Not applicable</option>
           </select>
         </div>
         <div>
-          <label for="lineup_details">Lineup details</label>
-          <textarea id="lineup_details"></textarea>
-        </div>
-        <div>
-          <label for="rest_advantage">Rest advantage</label>
-          <select id="rest_advantage">
+          <label for="confidence_alignment">Confidence alignment</label>
+          <select id="confidence_alignment">
             <option value="">Select</option>
-            <option value="no_advantage">No advantage</option>
-            <option value="home_rested_1plus_days">Home team rested</option>
-            <option value="away_rested_1plus_days">Away team rested</option>
+            <option value="aligned">Aligned</option>
+            <option value="overconfident">Overconfident</option>
+            <option value="underconfident">Underconfident</option>
           </select>
         </div>
         <div>
-          <label>Weather impact</label>
-          <div class="chip-row" id="weather_impact"></div>
-        </div>
-        <div>
-          <label for="weather_magnitude">Weather magnitude (-5 to +5)</label>
-          <input type="range" id="weather_magnitude" min="-5" max="5" step="1" value="0" />
-        </div>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Betting Market Observations</h2>
-      <div class="grid">
-        <div>
-          <label for="market_line_behavior">Market line movement</label>
-          <select id="market_line_behavior">
+          <label for="variance_assessment">Variance assessment</label>
+          <select id="variance_assessment">
             <option value="">Select</option>
-            <option value="no_movement">No movement</option>
-            <option value="moved_toward_prediction">Moved toward prediction</option>
-            <option value="moved_against_prediction">Moved against prediction</option>
-            <option value="sharp_money_detected">Sharp money detected</option>
+            <option value="low_variance">Low variance</option>
+            <option value="moderate_variance">Moderate variance</option>
+            <option value="high_variance">High variance</option>
           </select>
         </div>
         <div>
-          <label for="market_line_details">Line movement details</label>
-          <textarea id="market_line_details"></textarea>
-        </div>
-        <div>
-          <label for="model_vs_market">Model vs market alignment</label>
-          <select id="model_vs_market">
+          <label for="surprise_level">Surprise level</label>
+          <select id="surprise_level">
             <option value="">Select</option>
-            <option value="well_aligned">Well aligned</option>
-            <option value="model_underconfident">Model underconfident</option>
-            <option value="model_overconfident">Model overconfident</option>
-            <option value="arbitrage_opportunity">Arbitrage opportunity</option>
-          </select>
-        </div>
-        <div>
-          <label for="calibration_magnitude">Calibration magnitude</label>
-          <select id="calibration_magnitude">
-            <option value="">Select</option>
-            <option value="minor_1_to_2_pct">Minor (1-2%)</option>
-            <option value="moderate_3_to_5_pct">Moderate (3-5%)</option>
-            <option value="significant_6_plus_pct">Significant (6%+)</option>
-          </select>
-        </div>
-        <div>
-          <label for="calibration_commentary">Calibration commentary</label>
-          <textarea id="calibration_commentary"></textarea>
-        </div>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Missing Features</h2>
-      <div class="grid">
-        <div>
-          <label>Missing data</label>
-          <div class="chip-row" id="missing_data"></div>
-        </div>
-        <div>
-          <label for="feature_description">Feature description</label>
-          <textarea id="feature_description"></textarea>
-        </div>
-        <div>
-          <label for="feature_impact_estimate">Impact estimate</label>
-          <select id="feature_impact_estimate">
-            <option value="">Select</option>
-            <option value="game_changer">Game-changer</option>
-            <option value="moderate_improvement">Moderate improvement</option>
-            <option value="minor_edge">Minor edge</option>
-            <option value="speculative">Speculative</option>
+            <option value="not_surprised">Not surprised</option>
+            <option value="mild_surprise">Mild surprise</option>
+            <option value="big_surprise">Big surprise</option>
           </select>
         </div>
       </div>
     </section>
 
     <section class="card">
-      <h2>General Feedback</h2>
+      <h2>Baseball Logic</h2>
       <div class="grid">
         <div>
-          <label for="general_comments">Additional comments</label>
-          <textarea id="general_comments"></textarea>
+          <label>Baseball signals missed</label>
+          <div class="chip-row" id="baseball_miss_type"></div>
         </div>
         <div>
-          <label for="pattern_observation">Pattern observations</label>
-          <textarea id="pattern_observation"></textarea>
+          <label for="primary_baseball_driver">Primary driver</label>
+          <select id="primary_baseball_driver">
+            <option value="">Select</option>
+            <option value="none">None</option>
+            <option value="starter">Starter</option>
+            <option value="bullpen">Bullpen</option>
+            <option value="lineup">Lineup</option>
+            <option value="defense">Defense</option>
+            <option value="park">Park</option>
+            <option value="travel_rest">Travel/rest</option>
+            <option value="weather">Weather</option>
+            <option value="injury">Injury</option>
+          </select>
+        </div>
+        <div>
+          <label for="baseball_confidence">Baseball logic vs model</label>
+          <select id="baseball_confidence">
+            <option value="">Select</option>
+            <option value="strong_support">Strong support</option>
+            <option value="mild_support">Mild support</option>
+            <option value="neutral">Neutral</option>
+            <option value="mild_conflict">Mild conflict</option>
+            <option value="strong_conflict">Strong conflict</option>
+          </select>
+        </div>
+        <div>
+          <label for="baseball_notes">Short notes (optional)</label>
+          <textarea id="baseball_notes"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Betting Logic</h2>
+      <div class="grid">
+        <div>
+          <label>Market signals</label>
+          <div class="chip-row" id="market_signal"></div>
+        </div>
+        <div>
+          <label for="closing_line_value">Closing line value</label>
+          <select id="closing_line_value">
+            <option value="">Select</option>
+            <option value="favored_model">Favored model</option>
+            <option value="favored_market">Favored market</option>
+            <option value="neutral">Neutral</option>
+            <option value="not_available">Not available</option>
+          </select>
+        </div>
+        <div>
+          <label for="price_sensitivity">Price sensitivity</label>
+          <select id="price_sensitivity">
+            <option value="">Select</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+        <div>
+          <label for="betting_notes">Short notes (optional)</label>
+          <textarea id="betting_notes"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Feature Targets</h2>
+      <div class="grid">
+        <div>
+          <label>Feature gaps</label>
+          <div class="chip-row" id="missing_feature_flags"></div>
+        </div>
+        <div>
+          <label for="feature_priority">Priority</label>
+          <select id="feature_priority">
+            <option value="">Select</option>
+            <option value="must_have">Must have</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <div>
+          <label for="feature_target_detail">Short detail (optional)</label>
+          <textarea id="feature_target_detail"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Scoring</h2>
+      <div class="grid two">
+        <div>
+          <label for="model_grade">Overall model grade</label>
+          <select id="model_grade">
+            <option value="">Select</option>
+            <option value="5">5 (excellent)</option>
+            <option value="4">4</option>
+            <option value="3">3</option>
+            <option value="2">2</option>
+            <option value="1">1 (poor)</option>
+          </select>
+        </div>
+        <div>
+          <label for="confidence_grade">Confidence grade</label>
+          <select id="confidence_grade">
+            <option value="">Select</option>
+            <option value="5">5 (excellent)</option>
+            <option value="4">4</option>
+            <option value="3">3</option>
+            <option value="2">2</option>
+            <option value="1">1 (poor)</option>
+          </select>
+        </div>
+        <div>
+          <label for="variance_grade">Variance grade</label>
+          <select id="variance_grade">
+            <option value="">Select</option>
+            <option value="5">5 (excellent)</option>
+            <option value="4">4</option>
+            <option value="3">3</option>
+            <option value="2">2</option>
+            <option value="1">1 (poor)</option>
+          </select>
+        </div>
+        <div>
+          <label for="review_time">Time spent</label>
+          <select id="review_time">
+            <option value="">Select</option>
+            <option value="under_2_min">Under 2 minutes</option>
+            <option value="under_5_min">Under 5 minutes</option>
+            <option value="over_5_min">Over 5 minutes</option>
+          </select>
         </div>
       </div>
     </section>
@@ -330,31 +373,36 @@
     const API_BASE = "";
 
     const multiSelectConfig = {
-      pitcher_concerns: [
-        { id: "no_concerns", label: "No concerns" },
-        { id: "starter_fatigue", label: "Starter fatigue" },
-        { id: "starter_injury_risk", label: "Starter injury risk" },
-        { id: "bullpen_weakness", label: "Bullpen weakness" },
-        { id: "bullpen_strength", label: "Bullpen strength" }
+      baseball_miss_type: [
+        { id: "no_baseball_issue", label: "No baseball issue" },
+        { id: "starter_misread", label: "Starter misread" },
+        { id: "bullpen_usage", label: "Bullpen usage" },
+        { id: "lineup_change", label: "Lineup change" },
+        { id: "defense_shift", label: "Defense shift" },
+        { id: "park_factor", label: "Park factor" },
+        { id: "travel_rest", label: "Travel/rest" },
+        { id: "weather_impact", label: "Weather impact" },
+        { id: "injury_news", label: "Injury news" }
       ],
-      weather_impact: [
-        { id: "no_weather_factor", label: "No weather factor" },
-        { id: "cold_slows_flyballs", label: "Cold" },
-        { id: "hot_increases_distance", label: "Hot" },
-        { id: "wind_in", label: "Wind in" },
-        { id: "wind_out", label: "Wind out" },
-        { id: "wind_left", label: "Wind left" },
-        { id: "wind_right", label: "Wind right" },
-        { id: "humidity_high", label: "Humidity high" },
-        { id: "rain_delay_risk", label: "Rain risk" }
+      market_signal: [
+        { id: "no_market_signal", label: "No market signal" },
+        { id: "steam_against", label: "Steam against" },
+        { id: "steam_with", label: "Steam with" },
+        { id: "late_move", label: "Late move" },
+        { id: "sharp_action", label: "Sharp action" }
       ],
-      missing_data: [
-        { id: "no_missing_features", label: "No missing features" },
-        { id: "pitcher_metric", label: "Pitcher metric" },
-        { id: "position_player_metric", label: "Position player metric" },
-        { id: "weather_field_metric", label: "Weather/field metric" },
-        { id: "market_metric", label: "Market metric" },
-        { id: "other", label: "Other" }
+      missing_feature_flags: [
+        { id: "none_missing", label: "None" },
+        { id: "bullpen_usage", label: "Bullpen usage" },
+        { id: "pitcher_fatigue", label: "Pitcher fatigue" },
+        { id: "lineup_confirmation", label: "Lineup confirmation" },
+        { id: "platoon_splits", label: "Platoon splits" },
+        { id: "park_factors", label: "Park factors" },
+        { id: "weather_inputs", label: "Weather inputs" },
+        { id: "umpire_tendencies", label: "Umpire tendencies" },
+        { id: "travel_schedule", label: "Travel schedule" },
+        { id: "defensive_metrics", label: "Defensive metrics" },
+        { id: "market_metrics", label: "Market metrics" }
       ]
     };
 
@@ -379,6 +427,11 @@
       return inputs.map(input => input.value);
     }
 
+    function getQueryParam(name) {
+      const params = new URLSearchParams(window.location.search);
+      return params.get(name);
+    }
+
     async function loadPredictions() {
       const resp = await fetch(`${API_BASE}/api/v1/predictions/today`);
       const data = await resp.json();
@@ -391,6 +444,11 @@
         opt.dataset.gameId = game.game_id || "";
         select.appendChild(opt);
       });
+
+      const preset = getQueryParam("prediction_id");
+      if (preset) {
+        select.value = preset;
+      }
     }
 
     function getAnalystRole(analystId) {
@@ -411,38 +469,38 @@
         game_id: gameId,
         analyst_id: analystId,
         analyst_role: getAnalystRole(analystId),
-        form_version: "1.0",
+        form_version: "2.0",
         form_responses: {
-          confidence_calibration: {
-            confidence_assessment: document.getElementById("confidence_assessment").value,
-            confidence_reasoning: document.getElementById("confidence_reasoning").value,
-            spread_disagreement: document.getElementById("spread_disagreement").value,
-            spread_disagreement_reason: document.getElementById("spread_disagreement_reason").value
+          review_summary: {
+            review_stage: document.getElementById("review_stage").value,
+            outcome_correct: document.getElementById("outcome_correct").value,
+            spread_accuracy: document.getElementById("spread_accuracy").value,
+            confidence_alignment: document.getElementById("confidence_alignment").value,
+            variance_assessment: document.getElementById("variance_assessment").value,
+            surprise_level: document.getElementById("surprise_level").value
           },
           baseball_logic: {
-            pitcher_concerns: getMultiSelectValues("pitcher_concerns"),
-            pitcher_details: document.getElementById("pitcher_details").value,
-            lineup_impact: document.getElementById("lineup_impact").value,
-            lineup_details: document.getElementById("lineup_details").value,
-            rest_advantage: document.getElementById("rest_advantage").value,
-            weather_impact: getMultiSelectValues("weather_impact"),
-            weather_magnitude: Number(document.getElementById("weather_magnitude").value)
+            baseball_miss_type: getMultiSelectValues("baseball_miss_type"),
+            primary_baseball_driver: document.getElementById("primary_baseball_driver").value,
+            baseball_confidence: document.getElementById("baseball_confidence").value,
+            baseball_notes: document.getElementById("baseball_notes").value
           },
           betting_logic: {
-            market_line_behavior: document.getElementById("market_line_behavior").value,
-            market_line_details: document.getElementById("market_line_details").value,
-            model_vs_market: document.getElementById("model_vs_market").value,
-            calibration_magnitude: document.getElementById("calibration_magnitude").value,
-            calibration_commentary: document.getElementById("calibration_commentary").value
+            market_signal: getMultiSelectValues("market_signal"),
+            closing_line_value: document.getElementById("closing_line_value").value,
+            price_sensitivity: document.getElementById("price_sensitivity").value,
+            betting_notes: document.getElementById("betting_notes").value
           },
-          missing_features: {
-            missing_data: getMultiSelectValues("missing_data"),
-            feature_description: document.getElementById("feature_description").value,
-            feature_impact_estimate: document.getElementById("feature_impact_estimate").value
+          feature_targets: {
+            missing_feature_flags: getMultiSelectValues("missing_feature_flags"),
+            feature_priority: document.getElementById("feature_priority").value,
+            feature_target_detail: document.getElementById("feature_target_detail").value
           },
-          general_feedback: {
-            general_comments: document.getElementById("general_comments").value,
-            pattern_observation: document.getElementById("pattern_observation").value
+          meta_scoring: {
+            model_grade: document.getElementById("model_grade").value,
+            confidence_grade: document.getElementById("confidence_grade").value,
+            variance_grade: document.getElementById("variance_grade").value,
+            review_time: document.getElementById("review_time").value
           }
         }
       };
@@ -480,9 +538,9 @@
 
     document.getElementById("submit_btn").addEventListener("click", submitFeedback);
 
-    renderMultiSelect("pitcher_concerns", multiSelectConfig.pitcher_concerns);
-    renderMultiSelect("weather_impact", multiSelectConfig.weather_impact);
-    renderMultiSelect("missing_data", multiSelectConfig.missing_data);
+    renderMultiSelect("baseball_miss_type", multiSelectConfig.baseball_miss_type);
+    renderMultiSelect("market_signal", multiSelectConfig.market_signal);
+    renderMultiSelect("missing_feature_flags", multiSelectConfig.missing_feature_flags);
     loadPredictions();
   </script>
 </body>

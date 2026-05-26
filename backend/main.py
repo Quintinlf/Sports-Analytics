@@ -29,226 +29,216 @@ ANALYST_ROLES = {
 
 
 FORM_SCHEMA: Dict[str, Any] = {
-    "version": "1.0",
+    "version": "2.0",
     "sections": [
         {
-            "id": "confidence_calibration",
-            "title": "Confidence & Disagreement",
+            "id": "review_summary",
+            "title": "Postgame Summary",
             "fields": [
                 {
-                    "id": "confidence_assessment",
+                    "id": "review_stage",
                     "type": "single_select",
-                    "label": "Is this prediction confidence appropriate?",
+                    "label": "Review stage",
+                    "options": ["post_game", "pre_game"],
+                },
+                {
+                    "id": "outcome_correct",
+                    "type": "single_select",
+                    "label": "Was the winner correct?",
+                    "options": ["correct_winner", "wrong_winner", "unknown"],
+                },
+                {
+                    "id": "spread_accuracy",
+                    "type": "single_select",
+                    "label": "Spread accuracy",
                     "options": [
-                        "agree_high",
-                        "agree_medium",
-                        "agree_low",
-                        "should_be_higher",
-                        "should_be_lower",
+                        "within_1",
+                        "within_2",
+                        "within_3",
+                        "off_by_3_plus",
+                        "not_applicable",
                     ],
                 },
                 {
-                    "id": "confidence_reasoning",
-                    "type": "textarea",
-                    "label": "Why (if you disagreed)?",
-                    "max_chars": 500,
-                },
-                {
-                    "id": "spread_disagreement",
+                    "id": "confidence_alignment",
                     "type": "single_select",
-                    "label": "Do you agree with the predicted spread?",
-                    "options": [
-                        "completely_agree",
-                        "mostly_agree",
-                        "disagree_1_to_2_points",
-                        "disagree_3_plus_points",
-                        "no_opinion",
-                    ],
+                    "label": "Confidence alignment",
+                    "options": ["aligned", "overconfident", "underconfident"],
                 },
                 {
-                    "id": "spread_disagreement_reason",
-                    "type": "textarea",
-                    "label": "If disagreed, explain the reasoning:",
-                    "max_chars": 500,
+                    "id": "variance_assessment",
+                    "type": "single_select",
+                    "label": "Variance assessment",
+                    "options": ["low_variance", "moderate_variance", "high_variance"],
+                },
+                {
+                    "id": "surprise_level",
+                    "type": "single_select",
+                    "label": "Surprise level",
+                    "options": ["not_surprised", "mild_surprise", "big_surprise"],
                 },
             ],
         },
         {
             "id": "baseball_logic",
-            "title": "Baseball Logic Insights",
+            "title": "Baseball Logic",
             "fields": [
                 {
-                    "id": "pitcher_concerns",
+                    "id": "baseball_miss_type",
                     "type": "multi_select",
-                    "label": "Any concerns about starting pitchers today?",
+                    "label": "Baseball signals the model missed",
                     "options": [
-                        "no_concerns",
-                        "starter_fatigue",
-                        "starter_injury_risk",
-                        "bullpen_weakness",
-                        "bullpen_strength",
+                        "no_baseball_issue",
+                        "starter_misread",
+                        "bullpen_usage",
+                        "lineup_change",
+                        "defense_shift",
+                        "park_factor",
+                        "travel_rest",
+                        "weather_impact",
+                        "injury_news",
                     ],
                 },
                 {
-                    "id": "pitcher_details",
-                    "type": "textarea",
-                    "label": "Details (closer on IL, arm slot change, etc.):",
-                    "max_chars": 300,
-                },
-                {
-                    "id": "lineup_impact",
+                    "id": "primary_baseball_driver",
                     "type": "single_select",
-                    "label": "Lineup changes impact?",
+                    "label": "Primary baseball driver",
                     "options": [
-                        "no_changes",
-                        "key_player_out",
-                        "key_player_back",
-                        "backup_heavy_lineup",
+                        "none",
+                        "starter",
+                        "bullpen",
+                        "lineup",
+                        "defense",
+                        "park",
+                        "travel_rest",
+                        "weather",
+                        "injury",
                     ],
                 },
                 {
-                    "id": "lineup_details",
-                    "type": "textarea",
-                    "label": "Which player(s)? Impact severity (-3 to +3):",
-                    "max_chars": 300,
-                },
-                {
-                    "id": "rest_advantage",
+                    "id": "baseball_confidence",
                     "type": "single_select",
-                    "label": "Rest advantage?",
+                    "label": "Baseball logic vs model",
                     "options": [
-                        "no_advantage",
-                        "home_rested_1plus_days",
-                        "away_rested_1plus_days",
+                        "strong_support",
+                        "mild_support",
+                        "neutral",
+                        "mild_conflict",
+                        "strong_conflict",
                     ],
                 },
                 {
-                    "id": "weather_impact",
-                    "type": "multi_select",
-                    "label": "Weather factors affecting prediction?",
-                    "options": [
-                        "no_weather_factor",
-                        "cold_slows_flyballs",
-                        "hot_increases_distance",
-                        "wind_in",
-                        "wind_out",
-                        "wind_left",
-                        "wind_right",
-                        "humidity_high",
-                        "rain_delay_risk",
-                    ],
-                },
-                {
-                    "id": "weather_magnitude",
-                    "type": "slider",
-                    "label": "Estimated accuracy impact from weather (percentage points):",
-                    "min": -5,
-                    "max": 5,
-                    "step": 1,
+                    "id": "baseball_notes",
+                    "type": "textarea",
+                    "label": "Short notes (optional)",
+                    "max_chars": 250,
                 },
             ],
         },
         {
             "id": "betting_logic",
-            "title": "Betting Market Observations",
+            "title": "Betting Logic",
             "fields": [
                 {
-                    "id": "market_line_behavior",
-                    "type": "single_select",
-                    "label": "Market line movement?",
-                    "options": [
-                        "no_movement",
-                        "moved_toward_prediction",
-                        "moved_against_prediction",
-                        "sharp_money_detected",
-                    ],
-                },
-                {
-                    "id": "market_line_details",
-                    "type": "textarea",
-                    "label": "Line movement details (if applicable):",
-                    "max_chars": 300,
-                },
-                {
-                    "id": "model_vs_market",
-                    "type": "single_select",
-                    "label": "Model confidence vs. market price alignment?",
-                    "options": [
-                        "well_aligned",
-                        "model_underconfident",
-                        "model_overconfident",
-                        "arbitrage_opportunity",
-                    ],
-                },
-                {
-                    "id": "calibration_magnitude",
-                    "type": "single_select",
-                    "label": "If misaligned, magnitude:",
-                    "options": [
-                        "minor_1_to_2_pct",
-                        "moderate_3_to_5_pct",
-                        "significant_6_plus_pct",
-                    ],
-                },
-                {
-                    "id": "calibration_commentary",
-                    "type": "textarea",
-                    "label": "Why the divergence exists:",
-                    "max_chars": 300,
-                },
-            ],
-        },
-        {
-            "id": "missing_features",
-            "title": "Missing Features",
-            "fields": [
-                {
-                    "id": "missing_data",
+                    "id": "market_signal",
                     "type": "multi_select",
-                    "label": "Missing data in current model?",
+                    "label": "Market signals",
                     "options": [
-                        "no_missing_features",
-                        "pitcher_metric",
-                        "position_player_metric",
-                        "weather_field_metric",
-                        "market_metric",
-                        "other",
+                        "no_market_signal",
+                        "steam_against",
+                        "steam_with",
+                        "late_move",
+                        "sharp_action",
                     ],
                 },
                 {
-                    "id": "feature_description",
-                    "type": "textarea",
-                    "label": "Describe the feature (what + how calculated):",
-                    "max_chars": 500,
-                },
-                {
-                    "id": "feature_impact_estimate",
+                    "id": "closing_line_value",
                     "type": "single_select",
-                    "label": "Estimated impact on model accuracy:",
+                    "label": "Closing line value",
                     "options": [
-                        "game_changer",
-                        "moderate_improvement",
-                        "minor_edge",
-                        "speculative",
+                        "favored_model",
+                        "favored_market",
+                        "neutral",
+                        "not_available",
                     ],
+                },
+                {
+                    "id": "price_sensitivity",
+                    "type": "single_select",
+                    "label": "Price sensitivity",
+                    "options": ["low", "medium", "high"],
+                },
+                {
+                    "id": "betting_notes",
+                    "type": "textarea",
+                    "label": "Short notes (optional)",
+                    "max_chars": 250,
                 },
             ],
         },
         {
-            "id": "general_feedback",
-            "title": "General Feedback",
+            "id": "feature_targets",
+            "title": "Feature Targets",
             "fields": [
                 {
-                    "id": "general_comments",
-                    "type": "textarea",
-                    "label": "Any other comments about today's predictions?",
-                    "max_chars": 1000,
+                    "id": "missing_feature_flags",
+                    "type": "multi_select",
+                    "label": "Feature gaps",
+                    "options": [
+                        "none_missing",
+                        "bullpen_usage",
+                        "pitcher_fatigue",
+                        "lineup_confirmation",
+                        "platoon_splits",
+                        "park_factors",
+                        "weather_inputs",
+                        "umpire_tendencies",
+                        "travel_schedule",
+                        "defensive_metrics",
+                        "market_metrics",
+                    ],
                 },
                 {
-                    "id": "pattern_observation",
+                    "id": "feature_priority",
+                    "type": "single_select",
+                    "label": "Feature priority",
+                    "options": ["must_have", "high", "medium", "low"],
+                },
+                {
+                    "id": "feature_target_detail",
                     "type": "textarea",
-                    "label": "Did you spot any patterns in model failures?",
-                    "max_chars": 500,
+                    "label": "Short detail (optional)",
+                    "max_chars": 250,
+                },
+            ],
+        },
+        {
+            "id": "meta_scoring",
+            "title": "Scoring",
+            "fields": [
+                {
+                    "id": "model_grade",
+                    "type": "single_select",
+                    "label": "Overall model grade",
+                    "options": ["5", "4", "3", "2", "1"],
+                },
+                {
+                    "id": "confidence_grade",
+                    "type": "single_select",
+                    "label": "Confidence grade",
+                    "options": ["5", "4", "3", "2", "1"],
+                },
+                {
+                    "id": "variance_grade",
+                    "type": "single_select",
+                    "label": "Variance handling grade",
+                    "options": ["5", "4", "3", "2", "1"],
+                },
+                {
+                    "id": "review_time",
+                    "type": "single_select",
+                    "label": "Time spent",
+                    "options": ["under_2_min", "under_5_min", "over_5_min"],
                 },
             ],
         },
@@ -325,20 +315,18 @@ def submit_feedback(payload: FeedbackSubmitRequest) -> FeedbackSubmitResponse:
         raise HTTPException(status_code=400, detail="Analyst role mismatch")
 
     form_responses = payload.form_responses or {}
-    confidence_section = form_responses.get("confidence_calibration", {})
-    missing_section = form_responses.get("missing_features", {})
-    disagreement = confidence_section.get("spread_disagreement")
+    review_section = form_responses.get("review_summary", {})
+    feature_section = form_responses.get("feature_targets", {})
 
-    has_confidence_concern = confidence_section.get("confidence_assessment") in [
-        "should_be_higher",
-        "should_be_lower",
+    has_confidence_concern = review_section.get("confidence_alignment") in [
+        "overconfident",
+        "underconfident",
     ]
-    has_disagreement = disagreement in [
-        "disagree_1_to_2_points",
-        "disagree_3_plus_points",
+    has_disagreement = review_section.get("spread_accuracy") in [
+        "off_by_3_plus",
     ]
-    missing_list = missing_section.get("missing_data", []) or []
-    missing_list = [item for item in missing_list if item != "no_missing_features"]
+    missing_list = feature_section.get("missing_feature_flags", []) or []
+    missing_list = [item for item in missing_list if item != "none_missing"]
     missing_features_count = len(missing_list)
 
     with get_db_session() as session:
@@ -357,7 +345,7 @@ def submit_feedback(payload: FeedbackSubmitRequest) -> FeedbackSubmitResponse:
         session.commit()
         session.refresh(feedback)
 
-        feature_description = missing_section.get("feature_description")
+        feature_description = feature_section.get("feature_target_detail")
         if feature_description:
             suggestion = FeatureSuggestion(
                 feedback_id=feedback.feedback_id,
@@ -365,8 +353,8 @@ def submit_feedback(payload: FeedbackSubmitRequest) -> FeedbackSubmitResponse:
                 feature_category=_first_or_none(missing_list),
                 feature_name=_extract_feature_name(feature_description),
                 description=feature_description,
-                calculation_approach=missing_section.get("calculation_approach"),
-                estimated_impact=missing_section.get("feature_impact_estimate"),
+                calculation_approach=None,
+                estimated_impact=feature_section.get("feature_priority"),
             )
             session.add(suggestion)
             session.commit()
