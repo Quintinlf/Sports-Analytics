@@ -7,14 +7,23 @@ from typing import Generator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-DATABASE_URL = os.getenv("DATABASE_URL", "")
+def _require_env(name: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        raise RuntimeError(f"{name} is required")
+    return value
+
+
+DATABASE_URL = _require_env("DATABASE_URL")
 
 engine = None
 if DATABASE_URL:
+    engine_kwargs = {"pool_pre_ping": True, "future": True}
+    if DATABASE_URL.startswith("sqlite"):
+        engine_kwargs["connect_args"] = {"check_same_thread": False}
     engine = create_engine(
         DATABASE_URL,
-        pool_pre_ping=True,
-        future=True,
+        **engine_kwargs,
     )
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)

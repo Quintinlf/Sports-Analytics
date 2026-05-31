@@ -27,7 +27,7 @@ jobs:
 
       - name: Generate weekly report
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'sqlite:///./sports_analytics.db' }}
           FEEDBACK_FORM_URL: ${{ secrets.FEEDBACK_FORM_URL }}
           LOG_DIR: logs
         run: |

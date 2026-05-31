@@ -12,7 +12,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
+
+from scripts.db_utils import create_database_engine
 
 LOG_DIR = Path(os.getenv("LOG_DIR", "logs"))
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -26,14 +28,6 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger(__name__)
-
-
-def _require_env(name: str) -> str:
-    value = os.getenv(name)
-    if not value:
-        raise RuntimeError(f"{name} is required")
-    return value
-
 
 def _ensure_predictions_table(engine) -> None:
     create_sql = """
@@ -111,8 +105,8 @@ def _insert_predictions(engine, rows: List[Dict[str, Any]]) -> int:
 
 def main() -> int:
     try:
-        database_url = _require_env("DATABASE_URL")
-        engine = create_engine(database_url, pool_pre_ping=True)
+        database_url = os.getenv("DATABASE_URL") or "sqlite:///./sports_analytics.db"
+        engine = create_database_engine(database_url)
         _ensure_predictions_table(engine)
 
         predictions = _fetch_mlb_predictions()

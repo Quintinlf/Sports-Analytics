@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Integer, JSON, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -25,7 +25,10 @@ class AnalystFeedback(Base):
     game_id: Mapped[str] = mapped_column(String(50), nullable=False)
     submitted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     form_version: Mapped[str] = mapped_column(String(10), default="1.0")
-    form_responses: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    form_responses: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+    )
 
     has_confidence_concern: Mapped[bool] = mapped_column(Boolean, default=False)
     has_disagreement: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -12,9 +12,10 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 
 from reports.weekly_email_template import render_weekly_report
+from scripts.db_utils import create_database_engine
 
 LOG_DIR = Path(os.getenv("LOG_DIR", "logs"))
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -29,13 +30,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 def _require_env(name: str, default: str | None = None) -> str:
     value = os.getenv(name, default)
     if not value:
         raise RuntimeError(f"{name} is required")
     return value
-
 
 def _fetch_weekly_predictions(engine) -> pd.DataFrame:
     cutoff = datetime.utcnow().date() - timedelta(days=7)
@@ -163,9 +162,9 @@ def _derive_feature_targets(df: pd.DataFrame, failures: List[Dict[str, Any]]) ->
 
 def main() -> int:
     try:
-        database_url = _require_env("DATABASE_URL")
+        database_url = os.getenv("DATABASE_URL") or "sqlite:///./sports_analytics.db"
         feedback_url = _require_env("FEEDBACK_FORM_URL", "http://localhost:8000/")
-        engine = create_engine(database_url, pool_pre_ping=True)
+        engine = create_database_engine(database_url)
 
         df = _fetch_weekly_predictions(engine)
         metrics = _compute_metrics(df)

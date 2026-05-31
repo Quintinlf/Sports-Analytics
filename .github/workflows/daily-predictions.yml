@@ -27,7 +27,7 @@ jobs:
 
       - name: Run daily predictions
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'sqlite:///./sports_analytics.db' }}
           LOG_DIR: logs
         run: |
           mkdir -p logs
