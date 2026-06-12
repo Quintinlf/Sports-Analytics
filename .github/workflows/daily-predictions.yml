@@ -2,7 +2,7 @@ name: Daily MLB Predictions
 
 on:
   schedule:
-    # Run at 8 PM ET every day (01:00 UTC next day)
+    # 8 PM ET (1 AM UTC)
     - cron: "0 1 * * *"
   workflow_dispatch:
 
@@ -12,7 +12,8 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -27,7 +28,7 @@ jobs:
 
       - name: Run daily predictions
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL || 'sqlite:///./sports_analytics.db' }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           LOG_DIR: logs
         run: |
           mkdir -p logs
