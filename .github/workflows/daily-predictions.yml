@@ -31,7 +31,7 @@ jobs:
           LOG_DIR: logs
         run: |
           mkdir -p logs
-          python scripts/run_daily_predictions.py
+          python -m scripts.run_daily_predictions
 
       - name: Upload logs on failure
         if: failure()
