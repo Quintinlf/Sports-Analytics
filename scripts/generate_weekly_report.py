@@ -54,9 +54,15 @@ def _fetch_weekly_predictions(engine) -> pd.DataFrame:
     WHERE game_date >= :cutoff
     ORDER BY game_date ASC;
     """
-    with engine.begin() as conn:
-        rows = conn.execute(text(sql), {"cutoff": cutoff}).mappings().all()
-    return pd.DataFrame(rows)
+    try:
+        with engine.begin() as conn:
+            rows = conn.execute(text(sql), {"cutoff": cutoff}).mappings().all()
+        return pd.DataFrame(rows)
+    except Exception as exc:
+        logger.warning(
+            "Could not fetch predictions — table may not exist yet: %s", exc
+        )
+        return pd.DataFrame()
 
 
 def _compute_metrics(df: pd.DataFrame) -> Dict[str, Any]:

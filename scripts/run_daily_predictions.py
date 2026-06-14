@@ -30,6 +30,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def _ensure_predictions_table(engine) -> None:
+    # Use TEXT for feature_snapshot so the table works on both SQLite and
+    # PostgreSQL. JSON serialisation is handled by the application layer.
     create_sql = """
     CREATE TABLE IF NOT EXISTS mlb_predictions (
         prediction_id TEXT PRIMARY KEY,
@@ -40,8 +42,8 @@ def _ensure_predictions_table(engine) -> None:
         predicted_spread DOUBLE PRECISION NOT NULL,
         confidence_level TEXT NOT NULL,
         model_version TEXT NOT NULL,
-        feature_snapshot JSONB NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        feature_snapshot TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         actual_home_score INTEGER,
         actual_away_score INTEGER
     );
@@ -98,8 +100,17 @@ def _insert_predictions(engine, rows: List[Dict[str, Any]]) -> int:
     )
     ON CONFLICT (prediction_id) DO NOTHING;
     """
+    # Serialize feature_snapshot dicts to JSON strings so the query works on
+    # both SQLite (no native JSON type) and PostgreSQL.
+    serialized = []
+    for row in rows:
+        r = dict(row)
+        if isinstance(r.get("feature_snapshot"), dict):
+            r["feature_snapshot"] = json.dumps(r["feature_snapshot"])
+        serialized.append(r)
+
     with engine.begin() as conn:
-        result = conn.execute(text(insert_sql), rows)
+        result = conn.execute(text(insert_sql), serialized)
         return result.rowcount or 0
 
 

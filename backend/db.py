@@ -7,31 +7,23 @@ from typing import Generator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-def _require_env(name: str) -> str:
-    value = os.environ.get(name)
-    if not value:
-        raise RuntimeError(f"{name} is required")
-    return value
+DEFAULT_SQLITE_URL = "sqlite:///./sports_analytics.db"
 
+# Read at import time but do NOT raise — the engine is built lazily so the
+# module can be imported without DATABASE_URL (e.g. during local dev or tests).
+DATABASE_URL: str = os.environ.get("DATABASE_URL") or DEFAULT_SQLITE_URL
 
-DATABASE_URL = _require_env("DATABASE_URL")
+_engine_kwargs: dict = {"pool_pre_ping": True, "future": True}
+if DATABASE_URL.startswith("sqlite"):
+    _engine_kwargs["connect_args"] = {"check_same_thread": False}
 
-engine = None
-if DATABASE_URL:
-    engine_kwargs = {"pool_pre_ping": True, "future": True}
-    if DATABASE_URL.startswith("sqlite"):
-        engine_kwargs["connect_args"] = {"check_same_thread": False}
-    engine = create_engine(
-        DATABASE_URL,
-        **engine_kwargs,
-    )
+engine = create_engine(DATABASE_URL, **_engine_kwargs)
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
 
 def require_engine() -> None:
-    if engine is None:
-        raise RuntimeError("DATABASE_URL is not set. Set it to your PostgreSQL connection string.")
+    """No-op kept for backward compatibility; engine is always initialised."""
 
 
 @contextmanager
