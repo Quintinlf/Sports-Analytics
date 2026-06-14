@@ -1,0 +1,4 @@
+2026-06-13 22:07:16,232 - WARNING - Using stub predictions. Replace _fetch_mlb_predictions with real pipeline.
+2026-06-13 22:07:16,233 - INFO - Prediction: {"prediction_id": "stub-2026-06-14-nyy-bos", "sport": "MLB", "game_date": "2026-06-14", "home_team": "NYY", "away_team": "BOS", "win_probability": 0.62, "predicted_spread": -1.2, "confidence_level": "MEDIUM", "model_version": "elo_xgboost-stub-0.1", "feature_snapshot": {"rest_diff": 1, "bullpen_fatigue": 0.25}}
+2026-06-13 22:07:16,274 - INFO - Unified prediction stored (id=110): NYY vs BOS -> NYY Win
+2026-06-13 22:07:16,275 - INFO - Inserted 1 mlb_predictions row(s), 1 unified prediction(s)

@@ -1,9 +1,11 @@
-"""HTML template for weekly MLB performance report email."""
+"""HTML template for weekly sport performance report email."""
 from __future__ import annotations
 
 from datetime import datetime
 from html import escape
 from typing import Any, Dict, List
+
+from data.sport_config import format_matchup, get_email_labels
 
 
 def _format_percent(value: float) -> str:
@@ -13,37 +15,49 @@ def _format_percent(value: float) -> str:
 def render_weekly_report(
     metrics: Dict[str, Any],
     failures: List[Dict[str, Any]],
-  failure_patterns: List[str],
-  feature_targets: List[str],
+    failure_patterns: List[str],
+    feature_targets: List[str],
     feedback_form_url: str,
+    sport: str = "MLB",
 ) -> str:
+    labels = get_email_labels(sport)
     generated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    weekly_title = labels.get("weekly_title", f"Weekly {sport} Prediction Report")
+    icon = labels.get("icon", "")
 
     failures_rows = ""
     if failures:
         for failure in failures:
-            matchup = f"{failure.get('away_team', 'N/A')} at {failure.get('home_team', 'N/A')}"
+            matchup = format_matchup(
+                sport,
+                str(failure.get("home_team", "N/A")),
+                str(failure.get("away_team", "N/A")),
+            )
             prob = float(failure.get("win_probability") or 0.0)
-        prediction_id = escape(str(failure.get("prediction_id", "")))
-        review_link = f"{feedback_form_url}?prediction_id={prediction_id}" if prediction_id else feedback_form_url
+            prediction_id = escape(str(failure.get("prediction_id", "")))
+            review_link = (
+                f"{feedback_form_url}?prediction_id={prediction_id}&sport={sport}"
+                if prediction_id
+                else feedback_form_url
+            )
             failures_rows += (
                 "<tr>"
                 f"<td>{escape(str(failure.get('game_date', '')))}</td>"
                 f"<td>{escape(matchup)}</td>"
                 f"<td>{prob:.2f}</td>"
-          f"<td>{escape(str(failure.get('confidence_level', 'N/A')))}</td>"
-          f"<td><a href=\"{review_link}\">Review</a></td>"
+                f"<td>{escape(str(failure.get('confidence_level', 'N/A')))}</td>"
+                f"<td><a href=\"{review_link}\">Review</a></td>"
                 "</tr>"
             )
     else:
-      failures_rows = "<tr><td colspan=\"5\">No high-confidence misses this week.</td></tr>"
+        failures_rows = "<tr><td colspan=\"5\">No high-confidence misses this week.</td></tr>"
 
     pattern_items = "".join(
-      f"<li>{escape(item)}</li>" for item in failure_patterns
+        f"<li>{escape(item)}</li>" for item in failure_patterns
     ) or "<li>No patterns identified.</li>"
 
     target_items = "".join(
-      f"<li>{escape(item)}</li>" for item in feature_targets
+        f"<li>{escape(item)}</li>" for item in feature_targets
     ) or "<li>No feature targets identified.</li>"
 
     return f"""
@@ -51,7 +65,7 @@ def render_weekly_report(
 <html>
 <head>
   <meta charset=\"UTF-8\" />
-  <title>Weekly MLB Prediction Report</title>
+  <title>{escape(weekly_title)}</title>
   <style>
     body {{ font-family: Arial, sans-serif; background: #f8fafc; color: #0f172a; }}
     .card {{ max-width: 820px; margin: 24px auto; background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08); }}
@@ -71,7 +85,7 @@ def render_weekly_report(
 </head>
 <body>
   <div class=\"card\">
-    <h1>Weekly MLB Prediction Report</h1>
+    <h1>{icon} {escape(weekly_title)}</h1>
     <div class=\"meta\">Generated {generated_at}</div>
 
     <div class=\"grid\">

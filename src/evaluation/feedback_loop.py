@@ -12,6 +12,7 @@ import pandas as pd
 
 from data.database.database_handler import SportsAnalyticsDB
 from data.nba_loader import fetch_nba_games
+from data.sport_config import get_feature_set
 from evaluators.prediction_logger import PredictionLogger
 from src.evaluation.vectorized_features import compute_game_theory_matchup_features
 from src.utils.timezone_utils import utc_to_pst_fields
@@ -19,25 +20,7 @@ from src.utils.timezone_utils import utc_to_pst_fields
 # Replace this constant when you settle on a production feature name.
 NEW_FEATURE_COLUMN = 'new_feature'
 RETRAIN_EVERY_N_DEFAULT = 7
-HIGH_SIGNAL_FEATURE_COLUMNS = [
-    'elo_diff',
-    'last5_win_pct_home',
-    'last5_win_pct_away',
-    'last5_point_diff_home',
-    'last5_point_diff_away',
-    'rest_days_home',
-    'rest_days_away',
-    'rest_diff',
-    'is_back_to_back_home',
-    'is_back_to_back_away',
-    'home_away_strength_diff',
-    'schedule_density_diff',
-    'pace_diff',
-    'injury_proxy',
-    'expected_payoff_matrix',
-    'optimal_path_delta',
-    'signal_consistency_score',
-]
+HIGH_SIGNAL_FEATURE_COLUMNS = get_feature_set("NBA")
 BASELINE = {
     'accuracy': 0.5278,
     'brier': 0.2906,

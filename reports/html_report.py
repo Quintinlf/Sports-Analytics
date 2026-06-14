@@ -9,6 +9,8 @@ from datetime import datetime
 from html import escape
 from typing import Dict, List
 
+from data.sport_config import get_email_labels, format_matchup
+
 
 def _fmt_pct(value) -> str:
     try:
@@ -34,7 +36,11 @@ def _confidence_badge(level: str) -> str:
     return f'<span class="badge {css}">{escape(level)}</span>'
 
 
-def generate(games_predictions: List[Dict], title: str = 'NBA Game Predictions Report') -> str:
+def generate(
+    games_predictions: List[Dict],
+    title: str | None = None,
+    sport: str = "NBA",
+) -> str:
     """
     Render predictions to an HTML report string.
 
@@ -42,12 +48,17 @@ def generate(games_predictions: List[Dict], title: str = 'NBA Game Predictions R
     ----------
     games_predictions : list[dict]
         Each item should include game metadata and model output fields.
-    title : str
+    title : str, optional
+        Override report title; defaults to sport config label.
+    sport : str
+        Sport key for display labels (default NBA).
 
     Returns
     -------
     str  HTML document.
     """
+    if title is None:
+        title = get_email_labels(sport).get("report_title", "Game Predictions Report")
     now = datetime.now().strftime('%Y-%m-%d %H:%M')
 
     rows = []
@@ -55,6 +66,7 @@ def generate(games_predictions: List[Dict], title: str = 'NBA Game Predictions R
         home = escape(str(game.get('home_team', 'Home')))
         away = escape(str(game.get('away_team', 'Away')))
         game_date = escape(str(game.get('game_date', 'TBD')))
+        matchup = escape(format_matchup(sport, str(game.get('home_team', 'Home')), str(game.get('away_team', 'Away'))))
 
         spread = _fmt_num(game.get('spread'))
         q10 = _fmt_num(game.get('q10'))
@@ -72,7 +84,7 @@ def generate(games_predictions: List[Dict], title: str = 'NBA Game Predictions R
             <tr>
                 <td>{idx}</td>
                 <td>{game_date}</td>
-                <td>{away} @ {home}</td>
+                <td>{matchup}</td>
                 <td>{favored}</td>
                 <td>{spread}</td>
                 <td>{win_prob}</td>

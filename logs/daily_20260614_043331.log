@@ -1,0 +1,2 @@
+2026-06-13 21:33:31,104 - WARNING - Using stub predictions. Replace _fetch_mlb_predictions with real pipeline.
+2026-06-13 21:33:31,138 - INFO - Unified prediction stored (id=1): NYY vs BOS -> NYY Win

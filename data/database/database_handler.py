@@ -273,7 +273,45 @@ class SportsAnalyticsDB:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_games_cache_date ON games_cache(game_date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_features_prediction ON prediction_features(prediction_id)")
 
+        self._ensure_unified_schema(cursor)
+
         self.conn.commit()
+
+    def _ensure_unified_schema(self, cursor) -> None:
+        """Add unified multi-sport columns and prediction_options table."""
+        unified_columns = [
+            ('sport', 'TEXT'),
+            ('league', 'TEXT'),
+            ('feature_snapshot', 'TEXT'),
+            ('actual_home_score', 'INTEGER'),
+            ('actual_away_score', 'INTEGER'),
+            ('created_at', 'TEXT'),
+        ]
+        for col_name, col_type in unified_columns:
+            try:
+                cursor.execute(f"ALTER TABLE predictions ADD COLUMN {col_name} {col_type}")
+            except sqlite3.OperationalError:
+                pass
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS prediction_options (
+                option_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                prediction_id INTEGER NOT NULL,
+                option_name TEXT NOT NULL,
+                probability REAL NOT NULL,
+                rank INTEGER NOT NULL,
+                FOREIGN KEY (prediction_id) REFERENCES predictions(prediction_id),
+                UNIQUE(prediction_id, option_name)
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_predictions_sport_date "
+            "ON predictions (sport, game_date)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_options_prediction "
+            "ON prediction_options (prediction_id)"
+        )
         
     def insert_prediction(self, prediction_data: Dict[str, Any]) -> int:
         """Insert a new prediction record and return its ID"""
@@ -813,6 +851,148 @@ class SportsAnalyticsDB:
             ),
         )
         self.conn.commit()
+
+    def insert_unified_prediction(self, prediction_data: Dict[str, Any]) -> int:
+        """Insert a multi-sport prediction row (unified schema). Returns prediction_id."""
+        cursor = self.conn.cursor()
+        created_at = prediction_data.get('created_at') or datetime.now().isoformat()
+        feature_snapshot = prediction_data.get('feature_snapshot')
+        if feature_snapshot is not None and not isinstance(feature_snapshot, str):
+            feature_snapshot = json.dumps(_to_json_serializable(feature_snapshot))
+
+        # Detect legacy table (no sport column populated path uses legacy NOT NULL cols)
+        cursor.execute("PRAGMA table_info(predictions)")
+        columns = {row[1] for row in cursor.fetchall()}
+        is_legacy = 'predicted_spread' in columns
+
+        if is_legacy:
+            win_prob = float(prediction_data.get('win_probability') or 0.5)
+            cursor.execute(
+                """
+                INSERT INTO predictions (
+                    sport, league, game_date, home_team, away_team,
+                    predicted_winner, confidence_level, feature_snapshot,
+                    actual_home_score, actual_away_score, actual_winner, correct,
+                    created_at,
+                    predicted_spread, win_probability, confidence_score,
+                    prediction_timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    prediction_data['sport'],
+                    prediction_data.get('league'),
+                    prediction_data['game_date'],
+                    prediction_data['home_team'],
+                    prediction_data['away_team'],
+                    prediction_data['predicted_winner'],
+                    prediction_data['confidence_level'],
+                    feature_snapshot,
+                    prediction_data.get('actual_home_score'),
+                    prediction_data.get('actual_away_score'),
+                    prediction_data.get('actual_winner'),
+                    prediction_data.get('correct'),
+                    created_at,
+                    float(prediction_data.get('predicted_spread') or 0.0),
+                    win_prob,
+                    float(prediction_data.get('confidence_score') or win_prob),
+                    created_at,
+                ),
+            )
+        else:
+            cursor.execute(
+                """
+                INSERT INTO predictions (
+                    sport, league, game_date, home_team, away_team,
+                    predicted_winner, confidence_level, feature_snapshot,
+                    actual_home_score, actual_away_score, actual_winner, correct,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    prediction_data['sport'],
+                    prediction_data.get('league'),
+                    prediction_data['game_date'],
+                    prediction_data['home_team'],
+                    prediction_data['away_team'],
+                    prediction_data['predicted_winner'],
+                    prediction_data['confidence_level'],
+                    feature_snapshot,
+                    prediction_data.get('actual_home_score'),
+                    prediction_data.get('actual_away_score'),
+                    prediction_data.get('actual_winner'),
+                    prediction_data.get('correct'),
+                    created_at,
+                ),
+            )
+
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def insert_prediction_options(
+        self,
+        prediction_id: int,
+        options: List[Dict[str, Any]],
+    ) -> int:
+        """Insert outcome options for a prediction. Returns number of rows inserted."""
+        if not options:
+            return 0
+
+        cursor = self.conn.cursor()
+        for idx, opt in enumerate(options, start=1):
+            cursor.execute(
+                """
+                INSERT INTO prediction_options (
+                    prediction_id, option_name, probability, rank
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (
+                    prediction_id,
+                    opt['option_name'],
+                    float(opt['probability']),
+                    int(opt.get('rank') or idx),
+                ),
+            )
+        self.conn.commit()
+        return len(options)
+
+    def get_unified_predictions_by_date(
+        self,
+        start_date: str,
+        end_date: str,
+        sport: Optional[str] = None,
+    ) -> List[Dict]:
+        """Return unified prediction rows within a date range."""
+        cursor = self.conn.cursor()
+        sql = """
+            SELECT
+                prediction_id, sport, league, game_date,
+                home_team, away_team, predicted_winner, confidence_level,
+                feature_snapshot, actual_home_score, actual_away_score,
+                actual_winner, correct, created_at
+            FROM predictions
+            WHERE game_date BETWEEN ? AND ?
+        """
+        params: List[Any] = [start_date, end_date]
+        if sport:
+            sql += " AND sport = ?"
+            params.append(sport)
+        sql += " ORDER BY game_date, prediction_id"
+        cursor.execute(sql, params)
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_prediction_options(self, prediction_id: int) -> List[Dict]:
+        """Return all outcome options for a prediction ordered by rank."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            SELECT option_id, prediction_id, option_name, probability, rank
+            FROM prediction_options
+            WHERE prediction_id = ?
+            ORDER BY rank, option_id
+            """,
+            (prediction_id,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
 
     def close(self):
         """Close database connection"""

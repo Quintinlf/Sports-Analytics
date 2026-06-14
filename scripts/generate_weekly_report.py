@@ -16,6 +16,9 @@ from sqlalchemy import text
 
 from reports.weekly_email_template import render_weekly_report
 from scripts.db_utils import create_database_engine
+from data.sport_config import get_feedback_categories, get_weekly_feature_hints
+
+SPORT = "MLB"
 
 LOG_DIR = Path(os.getenv("LOG_DIR", "logs"))
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -161,8 +164,12 @@ def _derive_feature_targets(df: pd.DataFrame, failures: List[Dict[str, Any]]) ->
     avg_prob = sum(float(f.get("win_probability") or 0) for f in failures) / max(len(failures), 1)
     if avg_prob >= 0.65:
         targets.append("Recalibrate high-confidence probabilities (>=0.65).")
-    targets.append("Audit bullpen usage and late lineup confirmations for missed games.")
-    targets.append("Evaluate park and travel-rest adjustments for close spreads.")
+    targets.extend(get_weekly_feature_hints(SPORT))
+    categories = get_feedback_categories(SPORT)
+    if categories:
+        targets.append(
+            f"Review feedback categories: {', '.join(categories[:4])}."
+        )
     return targets
 
 
@@ -184,6 +191,7 @@ def main() -> int:
             failure_patterns=failure_patterns,
             feature_targets=feature_targets,
             feedback_form_url=feedback_url,
+            sport=SPORT,
         )
 
         report_path = Path("reports") / "weekly_email.html"

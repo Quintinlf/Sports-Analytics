@@ -13,12 +13,17 @@ from typing import List, Tuple
 import numpy as np
 import pandas as pd
 
+from data.sport_config import get_form_windows, get_feature_set
+
+NBA_DEFAULT_FORM_WINDOW = get_form_windows("NBA")[0]
+NBA_BOX_SCORE_STATS = get_feature_set("NBA", category="box_score_stats")
+
 
 # ---------------------------------------------------------------------------
 # Team-level features
 # ---------------------------------------------------------------------------
 
-def calculate_rolling_stats(df: pd.DataFrame, window: int = 5) -> pd.DataFrame:
+def calculate_rolling_stats(df: pd.DataFrame, window: int | None = None) -> pd.DataFrame:
     """
     Add rolling-average, streak, rest-day, and win-rate columns to game logs.
 
@@ -27,16 +32,18 @@ def calculate_rolling_stats(df: pd.DataFrame, window: int = 5) -> pd.DataFrame:
 
     Columns added
     -------------
-    {COL}_ROLL      : 5-game rolling mean of PTS, FG_PCT, FG3_PCT, REB, AST, STL, BLK, TOV
+    {COL}_ROLL      : rolling mean of box-score stats (see sport_config NBA)
     WIN_STREAK      : consecutive wins (+) / losses (-), based on prior games
     REST_DAYS       : calendar days since last game for this team
     IS_BACK_TO_BACK : 1 if REST_DAYS == 1 else 0
     WIN_RATE_10     : rolling 10-game win percentage (prior games only)
     """
+    if window is None:
+        window = NBA_DEFAULT_FORM_WINDOW
     df = df.copy().sort_values(['TEAM_ID', 'GAME_DATE'])
 
     # Basic rolling averages (shift to exclude current game)
-    for col in ('PTS', 'FG_PCT', 'FG3_PCT', 'REB', 'AST', 'STL', 'BLK', 'TOV'):
+    for col in NBA_BOX_SCORE_STATS:
         if col in df.columns:
             df[f'{col}_ROLL'] = df.groupby('TEAM_ID')[col].transform(
                 lambda x: x.shift(1).rolling(window=window, min_periods=1).mean()
