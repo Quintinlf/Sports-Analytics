@@ -1,15 +1,24 @@
 from __future__ import annotations
 
+import os
+import sys
+from pathlib import Path
+from urllib.parse import urlencode
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+print("[DEBUG] __name__ =", __name__)
+
 from datetime import date
 from typing import Any, Dict
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from sqlalchemy import text
 
 from backend.db import get_db_session, engine, require_engine
 from backend.models import Base, AnalystFeedback, FeatureSuggestion
+from backend.routes.feedback import router as feedback_router, init_platform
 from backend.schemas import (
     FeedbackStatusResponse,
     FeedbackSubmitRequest,
@@ -17,6 +26,8 @@ from backend.schemas import (
     PredictionSummary,
     PredictionsResponse,
 )
+
+_FRONTEND_DIR = Path(__file__).parent.parent / "frontend" / "feedback"
 
 
 ANALYSTS = ["lamar", "anderson", "luis", "alex"]
@@ -246,7 +257,7 @@ FORM_SCHEMA: Dict[str, Any] = {
 }
 
 
-app = FastAPI(title="MLB Analyst Feedback")
+app = FastAPI(title="Sports Analytics Analyst Platform")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -254,17 +265,92 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Register the new feedback platform router
+app.include_router(feedback_router)
+
 
 @app.on_event("startup")
 def _init_db() -> None:
     require_engine()
     Base.metadata.create_all(bind=engine)
+    # Seed predictions + create new review tables
+    init_platform(engine)
 
 
-@app.get("/", response_class=HTMLResponse)
-def index() -> HTMLResponse:
-    with open("backend/static/feedback_form.html", "r", encoding="utf-8") as handle:
-        return HTMLResponse(handle.read())
+# ── Feedback platform frontend ──────────────────────────────────────────────
+
+@app.get("/feedback", response_class=FileResponse, include_in_schema=False)
+@app.get("/feedback/", response_class=FileResponse, include_in_schema=False)
+def feedback_page() -> FileResponse:
+    # #region agent log: /feedback route
+    try:
+        print(f"[ROUTE] /feedback: attempting to serve {_FRONTEND_DIR / 'index.html'}")
+        result = FileResponse(_FRONTEND_DIR / "index.html")
+        print(f"[ROUTE] /feedback: FileResponse created successfully")
+        return result
+    except Exception as e:
+        import traceback
+        print(f"[ROUTE] /feedback: EXCEPTION")
+        traceback.print_exc()
+        raise
+    # #endregion
+
+
+@app.get("/feedback/styles.css", include_in_schema=False)
+def feedback_styles() -> FileResponse:
+    return FileResponse(_FRONTEND_DIR / "styles.css", media_type="text/css")
+
+
+@app.get("/feedback/script.js", include_in_schema=False)
+def feedback_script() -> FileResponse:
+    return FileResponse(_FRONTEND_DIR / "script.js", media_type="application/javascript")
+
+
+@app.get("/feedback/preview", response_class=HTMLResponse, include_in_schema=False)
+def feedback_preview(
+    reviewer_id: str = Query(default="quintin"),
+    sport: str = Query(default=""),
+) -> HTMLResponse:
+    # #region agent log: /feedback/preview route
+    try:
+        print(f"[ROUTE] /feedback/preview: reviewer_id={reviewer_id!r}, sport={sport!r}")
+        params: Dict[str, str] = {}
+        if reviewer_id:
+            params["reviewer_id"] = reviewer_id
+        if sport:
+            params["sport"] = sport
+        query = urlencode(params)
+        iframe_src = "/feedback" + (f"?{query}" if query else "")
+        print(f"[ROUTE] /feedback/preview: iframe_src={iframe_src!r}")
+
+        html = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Feedback Preview</title>
+  <style>
+    * {{ margin:0; padding:0; box-sizing:border-box; }}
+    html, body {{ width:100%; height:100%; overflow:hidden; background:#0b0f14; }}
+    iframe {{ width:100%; height:100%; border:none; display:block; }}
+  </style>
+</head>
+<body>
+  <iframe src="{iframe_src}"></iframe>
+</body>
+</html>"""
+        print(f"[ROUTE] /feedback/preview: HTMLResponse created, length={len(html)}")
+        return HTMLResponse(html)
+    except Exception as e:
+        import traceback
+        print(f"[ROUTE] /feedback/preview: EXCEPTION")
+        traceback.print_exc()
+        raise
+    # #endregion
+
+
+@app.get("/", include_in_schema=False)
+def index() -> RedirectResponse:
+    return RedirectResponse(url="/feedback", status_code=307)
 
 
 @app.get("/api/v1/forms/feedback-template/{prediction_id}")
@@ -401,3 +487,44 @@ def _extract_feature_name(text_value: Any) -> str | None:
     if not text:
         return None
     return text.split()[0][:100]
+
+
+if __name__ == "__main__":
+    import webbrowser
+    import uvicorn
+
+    # #region agent log: startup verification
+    print("[STARTUP] FastAPI app initialized")
+    print("[STARTUP] Registered routes:")
+    for r in app.routes:
+        if hasattr(r, 'path'):
+            print(f"  {r.path}")
+    print(f"[STARTUP] _FRONTEND_DIR: {_FRONTEND_DIR}")
+    print(f"[STARTUP] _FRONTEND_DIR exists: {_FRONTEND_DIR.exists()}")
+    if _FRONTEND_DIR.exists():
+        index_html = _FRONTEND_DIR / "index.html"
+        print(f"[STARTUP] index.html exists: {index_html.exists()}")
+    # #endregion
+
+    dashboard_url = "http://localhost:8000/feedback"
+    preview_url = "http://localhost:8000/feedback/preview?reviewer_id=quintin"
+    print("[STARTUP] Dashboard:")
+    print(dashboard_url)
+    print()
+    print("[STARTUP] Preview:")
+    print(preview_url)
+    print()
+    print("[STARTUP] Browser opened; starting uvicorn...")
+    print("[DEBUG] About to call uvicorn.run")
+    opened = webbrowser.open(preview_url, new=2)
+    if not opened:
+        # On Windows, webbrowser.open can fail when no default association exists.
+        print("[STARTUP] WARNING: webbrowser.open could not launch automatically.")
+        print("[STARTUP] Fallback: paste the Preview URL into your browser manually.")
+        if os.name == "nt":
+            try:
+                os.startfile(preview_url)  # type: ignore[attr-defined]
+                print("[STARTUP] Fallback os.startfile() launch attempted.")
+            except Exception:
+                pass
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=False)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -14,14 +15,22 @@ DEFAULT_SQLITE_URL = "sqlite:///./sports_analytics.db"
 UNIFIED_PREDICTIONS_DDL = """
 CREATE TABLE IF NOT EXISTS predictions (
     prediction_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider_game_id TEXT,
+    game_signature TEXT,
     sport TEXT NOT NULL,
     league TEXT,
     game_date TEXT NOT NULL,
     home_team TEXT NOT NULL,
     away_team TEXT NOT NULL,
     predicted_winner TEXT NOT NULL,
+    win_probability REAL,
     confidence_level TEXT NOT NULL,
+    bet_type TEXT,
+    bet_units REAL,
+    bet_recommendation TEXT,
     feature_snapshot TEXT,
+    model_name TEXT,
+    prediction_status TEXT,
     actual_home_score INTEGER,
     actual_away_score INTEGER,
     actual_winner TEXT,
@@ -46,14 +55,22 @@ CREATE TABLE IF NOT EXISTS prediction_options (
 UNIFIED_PREDICTIONS_DDL_PG = """
 CREATE TABLE IF NOT EXISTS predictions (
     prediction_id SERIAL PRIMARY KEY,
+    provider_game_id TEXT,
+    game_signature TEXT,
     sport TEXT NOT NULL,
     league TEXT,
     game_date DATE NOT NULL,
     home_team TEXT NOT NULL,
     away_team TEXT NOT NULL,
     predicted_winner TEXT NOT NULL,
+    win_probability DOUBLE PRECISION,
     confidence_level TEXT NOT NULL,
+    bet_type TEXT,
+    bet_units DOUBLE PRECISION,
+    bet_recommendation TEXT,
     feature_snapshot TEXT,
+    model_name TEXT,
+    prediction_status TEXT,
     actual_home_score INTEGER,
     actual_away_score INTEGER,
     actual_winner TEXT,
@@ -74,11 +91,21 @@ CREATE TABLE IF NOT EXISTS prediction_options (
 """
 
 UNIFIED_PREDICTION_COLUMNS = [
+    ("provider_game_id", "TEXT"),
+    ("game_signature", "TEXT"),
     ("sport", "TEXT"),
     ("league", "TEXT"),
+    ("win_probability", "REAL"),
     ("feature_snapshot", "TEXT"),
+    ("bet_type", "TEXT"),
+    ("bet_units", "REAL"),
+    ("bet_recommendation", "TEXT"),
+    ("model_name", "TEXT"),
+    ("prediction_status", "TEXT"),
     ("actual_home_score", "INTEGER"),
     ("actual_away_score", "INTEGER"),
+    ("actual_winner", "TEXT"),
+    ("correct", "INTEGER"),
     ("created_at", "TEXT"),
 ]
 
@@ -126,6 +153,15 @@ def _serialize_feature_snapshot(value: Any) -> Optional[str]:
     return json.dumps(value)
 
 
+def _compute_game_signature(prediction_data: Dict[str, Any]) -> str:
+    sport = str(prediction_data.get("sport", "")).upper().strip()
+    game_date = str(prediction_data.get("game_date", "")).strip()
+    home = str(prediction_data.get("home_team", "")).upper().strip()
+    away = str(prediction_data.get("away_team", "")).upper().strip()
+    raw = f"{sport}|{game_date}|{home}|{away}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 def ensure_unified_schema(engine: Engine) -> None:
     """Create or migrate unified predictions and prediction_options tables."""
     is_pg = _is_postgresql(engine)
@@ -134,11 +170,43 @@ def ensure_unified_schema(engine: Engine) -> None:
         if not _table_exists(engine, "predictions"):
             ddl = UNIFIED_PREDICTIONS_DDL_PG if is_pg else UNIFIED_PREDICTIONS_DDL
             conn.execute(text(ddl))
-        elif _predictions_is_legacy(engine):
+        else:
             for col_name, col_type in UNIFIED_PREDICTION_COLUMNS:
                 if not _column_exists(engine, "predictions", col_name):
                     conn.execute(
                         text(f"ALTER TABLE predictions ADD COLUMN {col_name} {col_type}")
+                    )
+
+            if _column_exists(engine, "predictions", "game_signature"):
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM predictions
+                        WHERE prediction_id NOT IN (
+                            SELECT MAX(prediction_id)
+                            FROM predictions
+                            GROUP BY sport, game_date, home_team, away_team
+                        )
+                        """
+                    )
+                )
+
+                rows = conn.execute(
+                    text(
+                        """
+                        SELECT prediction_id, sport, game_date, home_team, away_team
+                        FROM predictions
+                        WHERE game_signature IS NULL
+                        """
+                    )
+                ).mappings().all()
+                for row in rows:
+                    sig = _compute_game_signature(dict(row))
+                    conn.execute(
+                        text(
+                            "UPDATE predictions SET game_signature = :sig WHERE prediction_id = :pid"
+                        ),
+                        {"sig": sig, "pid": row["prediction_id"]},
                     )
 
         options_ddl = PREDICTION_OPTIONS_DDL_PG if is_pg else PREDICTION_OPTIONS_DDL
@@ -149,6 +217,18 @@ def ensure_unified_schema(engine: Engine) -> None:
                 text(
                     "CREATE INDEX IF NOT EXISTS idx_predictions_sport_date "
                     "ON predictions (sport, game_date)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_predictions_game_signature "
+                    "ON predictions (game_signature)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_predictions_provider_game_id "
+                    "ON predictions (provider_game_id)"
                 )
             )
             conn.execute(
@@ -166,6 +246,18 @@ def ensure_unified_schema(engine: Engine) -> None:
             )
             conn.execute(
                 text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_predictions_game_signature "
+                    "ON predictions (game_signature)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_predictions_provider_game_id "
+                    "ON predictions (provider_game_id)"
+                )
+            )
+            conn.execute(
+                text(
                     "CREATE INDEX IF NOT EXISTS idx_options_prediction "
                     "ON prediction_options (prediction_id)"
                 )
@@ -178,6 +270,8 @@ def insert_prediction(engine: Engine, prediction_data: Dict[str, Any]) -> int:
 
     created_at = prediction_data.get("created_at") or datetime.utcnow().isoformat()
     feature_snapshot = _serialize_feature_snapshot(prediction_data.get("feature_snapshot"))
+    provider_game_id = prediction_data.get("provider_game_id")
+    game_signature = prediction_data.get("game_signature") or _compute_game_signature(prediction_data)
 
     is_legacy = _predictions_is_legacy(engine)
 
@@ -221,41 +315,133 @@ def insert_prediction(engine: Engine, prediction_data: Dict[str, Any]) -> int:
                 "confidence_score": float(prediction_data.get("confidence_score") or win_prob),
                 "prediction_timestamp": created_at,
             }
-        else:
-            sql = """
-                INSERT INTO predictions (
-                    sport, league, game_date, home_team, away_team,
-                    predicted_winner, confidence_level, feature_snapshot,
-                    actual_home_score, actual_away_score, actual_winner, correct,
-                    created_at
-                ) VALUES (
-                    :sport, :league, :game_date, :home_team, :away_team,
-                    :predicted_winner, :confidence_level, :feature_snapshot,
-                    :actual_home_score, :actual_away_score, :actual_winner, :correct,
-                    :created_at
+            # Optional columns added via schema migration.
+            optional_cols = []
+            optional_vals = []
+            for col_name, param_name in [
+                ("bet_type", "bet_type"),
+                ("bet_units", "bet_units"),
+                ("bet_recommendation", "bet_recommendation"),
+                ("model_name", "model_name"),
+                ("prediction_status", "prediction_status"),
+            ]:
+                if _column_exists(engine, "predictions", col_name):
+                    optional_cols.append(col_name)
+                    optional_vals.append(f":{param_name}")
+                    params[param_name] = prediction_data.get(param_name)
+
+            if optional_cols:
+                sql = sql.replace(
+                    "prediction_timestamp\n                ) VALUES (",
+                    "prediction_timestamp, " + ", ".join(optional_cols) + "\n                ) VALUES (",
+                ).replace(
+                    ":prediction_timestamp\n                )",
+                    ":prediction_timestamp, " + ", ".join(optional_vals) + "\n                )",
                 )
-            """
+        else:
             params = {
+                "provider_game_id": provider_game_id,
+                "game_signature": game_signature,
                 "sport": prediction_data["sport"],
                 "league": prediction_data.get("league"),
                 "game_date": prediction_data["game_date"],
                 "home_team": prediction_data["home_team"],
                 "away_team": prediction_data["away_team"],
                 "predicted_winner": prediction_data["predicted_winner"],
+                "win_probability": float(prediction_data.get("win_probability") or 0.5),
                 "confidence_level": prediction_data["confidence_level"],
+                "bet_type": prediction_data.get("bet_type"),
+                "bet_units": prediction_data.get("bet_units"),
+                "bet_recommendation": prediction_data.get("bet_recommendation"),
                 "feature_snapshot": feature_snapshot,
+                "model_name": prediction_data.get("model_name"),
+                "prediction_status": prediction_data.get("prediction_status", "UPCOMING"),
                 "actual_home_score": prediction_data.get("actual_home_score"),
                 "actual_away_score": prediction_data.get("actual_away_score"),
                 "actual_winner": prediction_data.get("actual_winner"),
                 "correct": prediction_data.get("correct"),
                 "created_at": created_at,
             }
+            existing = None
+            if provider_game_id:
+                existing = conn.execute(
+                    text(
+                        "SELECT prediction_id FROM predictions "
+                        "WHERE provider_game_id = :provider_game_id LIMIT 1"
+                    ),
+                    {"provider_game_id": provider_game_id},
+                ).fetchone()
+            if not existing:
+                existing = conn.execute(
+                    text(
+                        "SELECT prediction_id FROM predictions "
+                        "WHERE game_signature = :game_signature LIMIT 1"
+                    ),
+                    {"game_signature": game_signature},
+                ).fetchone()
+
+            if existing:
+                prediction_id = int(existing[0])
+                conn.execute(
+                    text(
+                        """
+                        UPDATE predictions
+                        SET provider_game_id = :provider_game_id,
+                            game_signature = :game_signature,
+                            sport = :sport,
+                            league = :league,
+                            game_date = :game_date,
+                            home_team = :home_team,
+                            away_team = :away_team,
+                            predicted_winner = :predicted_winner,
+                            win_probability = :win_probability,
+                            confidence_level = :confidence_level,
+                            bet_type = :bet_type,
+                            bet_units = :bet_units,
+                            bet_recommendation = :bet_recommendation,
+                            feature_snapshot = :feature_snapshot,
+                            model_name = :model_name,
+                            prediction_status = :prediction_status,
+                            actual_home_score = :actual_home_score,
+                            actual_away_score = :actual_away_score,
+                            actual_winner = :actual_winner,
+                            correct = :correct
+                        WHERE prediction_id = :prediction_id
+                        """
+                    ),
+                    {**params, "prediction_id": prediction_id},
+                )
+                return prediction_id
+
+            insert_sql = """
+                INSERT INTO predictions (
+                    provider_game_id, game_signature, sport, league, game_date, home_team, away_team,
+                    predicted_winner, win_probability, confidence_level,
+                    bet_type, bet_units, bet_recommendation,
+                    feature_snapshot, model_name, prediction_status,
+                    actual_home_score, actual_away_score, actual_winner, correct,
+                    created_at
+                ) VALUES (
+                    :provider_game_id, :game_signature, :sport, :league, :game_date, :home_team, :away_team,
+                    :predicted_winner, :win_probability, :confidence_level,
+                    :bet_type, :bet_units, :bet_recommendation,
+                    :feature_snapshot, :model_name, :prediction_status,
+                    :actual_home_score, :actual_away_score, :actual_winner, :correct,
+                    :created_at
+                )
+            """
+            if _is_postgresql(engine):
+                result = conn.execute(text(insert_sql + " RETURNING prediction_id"), params)
+                row = result.fetchone()
+                return int(row[0])
+            conn.execute(text(insert_sql), params)
+            result = conn.execute(text("SELECT last_insert_rowid()"))
+            return int(result.scalar())
 
         if _is_postgresql(engine):
             result = conn.execute(text(sql + " RETURNING prediction_id"), params)
             row = result.fetchone()
             return int(row[0])
-
         conn.execute(text(sql), params)
         result = conn.execute(text("SELECT last_insert_rowid()"))
         return int(result.scalar())

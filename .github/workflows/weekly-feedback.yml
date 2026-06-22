@@ -2,7 +2,7 @@ name: Weekly Reviewer Digest
 
 on:
   schedule:
-    - cron: "0 0 * * 0"
+    - cron: "0 0 * * 0"  # Sunday 00:00 UTC
   workflow_dispatch:
 
 jobs:
@@ -33,8 +33,7 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           FEEDBACK_BASE_URL: ${{ secrets.FEEDBACK_BASE_URL }}
           FEEDBACK_EMAIL_FROM: ${{ secrets.FEEDBACK_EMAIL_FROM }}
-        run: |
-          python scripts/send_weekly_feedback_form.py
+        run: python scripts/send_weekly_feedback_form.py
 
       - name: Upload logs on failure
         if: failure()

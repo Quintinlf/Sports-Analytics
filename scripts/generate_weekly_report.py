@@ -11,6 +11,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List
 
+# Ensure repo root is on sys.path when invoked as `python scripts/generate_weekly_report.py`
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import pandas as pd
 from sqlalchemy import text
 
