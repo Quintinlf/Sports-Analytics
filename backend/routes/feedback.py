@@ -23,7 +23,12 @@ from backend.models import (
     ReviewerPreference,
     ReviewerCustomSection,
 )
-from scripts.db_utils import ensure_unified_schema, insert_prediction
+from scripts.db_utils import (
+    ensure_unified_schema,
+    insert_prediction,
+    sql_bool_true,
+    sql_case_bool_true,
+)
 from data.prediction_service import UnifiedPredictionService
 from data.nba_predictions_service import NBALivePredictionService, OffSeasonStrategy
 from data.mlb_predictions_service import MLBLivePredictionService
@@ -374,11 +379,12 @@ def init_platform(db_engine) -> None:
                 text(
                     """
                     UPDATE reviewers
-                    SET email = COALESCE(email, :email)
+                    SET email = :email
                     WHERE reviewer_id = :rid
+                      AND (email IS NULL OR email = 'quintin@example.com')
                     """
                 ),
-                {"rid": existing_quintin[0], "email": "quintin@example.com"},
+                {"rid": existing_quintin[0], "email": "quintinlf7@gmail.com"},
             )
         else:
             conn.execute(
@@ -391,7 +397,7 @@ def init_platform(db_engine) -> None:
                 {
                     "rid": "quintin",
                     "name": "Quintin",
-                    "email": "quintin@example.com",
+                    "email": "quintinlf7@gmail.com",
                     "ts": datetime.utcnow().isoformat(),
                 },
             )
@@ -412,13 +418,18 @@ def init_platform(db_engine) -> None:
                     (reviewer_id, favorite_sports, emails_enabled, wants_betting_section,
                      wants_explanations, wants_postgame_reviews, email_frequency, updated_at)
                 VALUES
-                    (:rid, :sports, 1, 1, 1, 1, 'weekly', :ts)
+                    (:rid, :sports, :emails_enabled, :wants_betting_section,
+                     :wants_explanations, :wants_postgame_reviews, 'weekly', :ts)
                 ON CONFLICT(reviewer_id) DO NOTHING
                 """
             ),
             {
                 "rid": "quintin",
                 "sports": json.dumps(["MLB", "NBA"]),
+                "emails_enabled": True,
+                "wants_betting_section": True,
+                "wants_explanations": True,
+                "wants_postgame_reviews": True,
                 "ts": datetime.utcnow().isoformat(),
             },
         )
@@ -555,30 +566,37 @@ def _explanations(snap: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def _reviewer_stats(session, reviewer_id: str) -> Dict[str, Any]:
     """Compute reviewer stats via raw SQL."""
+    eng = session.get_bind()
+    beat_true = sql_bool_true("ro.reviewer_beat_model", eng)
+    agree_true = sql_bool_true("pr.agree_with_model", eng)
+    reviewer_correct_true = sql_bool_true("ro.reviewer_correct", eng)
+    case_correct = sql_case_bool_true("ro.reviewer_correct", eng)
+    case_beat = sql_case_bool_true("ro.reviewer_beat_model", eng)
+
     total_sql = text("""
         SELECT COUNT(*) FROM prediction_reviews WHERE reviewer_id = :rid
     """)
     total = session.execute(total_sql, {"rid": reviewer_id}).scalar() or 0
 
-    beat_sql = text("""
+    beat_sql = text(f"""
         SELECT COUNT(*) FROM review_outcomes ro
         JOIN prediction_reviews pr ON ro.review_id = pr.review_id
-        WHERE pr.reviewer_id = :rid AND ro.reviewer_beat_model = 1
+        WHERE pr.reviewer_id = :rid AND {beat_true}
     """)
     beat_count = session.execute(beat_sql, {"rid": reviewer_id}).scalar() or 0
 
-    agree_sql = text("""
+    agree_sql = text(f"""
         SELECT COUNT(*) FROM prediction_reviews pr
         JOIN predictions p ON pr.prediction_id = p.prediction_id
-        WHERE pr.reviewer_id = :rid AND pr.agree_with_model = 1
+        WHERE pr.reviewer_id = :rid AND {agree_true}
     """)
     agree_count = session.execute(agree_sql, {"rid": reviewer_id}).scalar() or 0
     agree_pct = round((agree_count / total * 100) if total else 0, 1)
 
-    reviewer_correct_sql = text("""
+    reviewer_correct_sql = text(f"""
         SELECT COUNT(*) FROM review_outcomes ro
         JOIN prediction_reviews pr ON ro.review_id = pr.review_id
-        WHERE pr.reviewer_id = :rid AND ro.reviewer_correct = 1
+        WHERE pr.reviewer_id = :rid AND {reviewer_correct_true}
     """)
     reviewer_correct = session.execute(reviewer_correct_sql, {"rid": reviewer_id}).scalar() or 0
 
@@ -590,11 +608,10 @@ def _reviewer_stats(session, reviewer_id: str) -> Dict[str, Any]:
     settled = session.execute(settled_sql, {"rid": reviewer_id}).scalar() or 0
     reviewer_acc = round((reviewer_correct / settled * 100) if settled else 0, 1)
 
-    # Per-sport breakdown
-    sport_sql = text("""
+    sport_sql = text(f"""
         SELECT p.sport, COUNT(*) as cnt,
-               SUM(CASE WHEN ro.reviewer_correct = 1 THEN 1 ELSE 0 END) as correct,
-               SUM(CASE WHEN ro.reviewer_beat_model = 1 THEN 1 ELSE 0 END) as beat
+               SUM({case_correct}) as correct,
+               SUM({case_beat}) as beat
         FROM prediction_reviews pr
         JOIN predictions p ON pr.prediction_id = p.prediction_id
         LEFT JOIN review_outcomes ro ON pr.review_id = ro.review_id
@@ -725,12 +742,14 @@ def _load_reviewer_preferences(session, reviewer_id: str) -> Dict[str, Any]:
 
 
 def _load_custom_sections(session, reviewer_id: str) -> List[Dict[str, Any]]:
+    eng = session.get_bind()
+    active_true = sql_bool_true("active", eng)
     rows = session.execute(
         text(
-            """
+            f"""
             SELECT section_id, reviewer_id, title, content, active
             FROM reviewer_custom_sections
-            WHERE reviewer_id = :rid AND active = 1
+            WHERE reviewer_id = :rid AND {active_true}
             ORDER BY created_at DESC
             """
         ),
@@ -1041,10 +1060,10 @@ def update_reviewer_preferences(reviewer_id: str, payload: ReviewerPreferenceReq
             {
                 "rid": rid,
                 "sports": json.dumps(payload.favorite_sports),
-                "emails_enabled": 1 if payload.emails_enabled else 0,
-                "wants_betting_section": 1 if payload.wants_betting_section else 0,
-                "wants_explanations": 1 if payload.wants_explanations else 0,
-                "wants_postgame_reviews": 1 if payload.wants_postgame_reviews else 0,
+                "emails_enabled": payload.emails_enabled,
+                "wants_betting_section": payload.wants_betting_section,
+                "wants_explanations": payload.wants_explanations,
+                "wants_postgame_reviews": payload.wants_postgame_reviews,
                 "email_frequency": payload.email_frequency,
                 "ts": datetime.utcnow().isoformat(),
             },
@@ -1083,7 +1102,7 @@ def create_custom_section(reviewer_id: str, payload: CustomSectionRequest) -> Di
                 "rid": resolved["reviewer_id"],
                 "title": payload.title.strip(),
                 "content": payload.content.strip(),
-                "active": 1 if payload.active else 0,
+                "active": payload.active,
                 "ts": datetime.utcnow().isoformat(),
             },
         )
@@ -1147,7 +1166,7 @@ def submit_pregame_review(payload: PregameReviewRequest) -> Dict[str, Any]:
                 "pick": payload.reviewer_pick,
                 "conf": payload.reviewer_confidence,
                 "bet": payload.would_bet,
-                "agree": 1 if agree_with_model else 0,
+                "agree": agree_with_model,
                 "factors": factors_json,
                 "notes": payload.pregame_notes,
                 "ts": datetime.utcnow().isoformat(),
@@ -1224,14 +1243,14 @@ def submit_postgame_outcome(payload: PostgameOutcomeRequest) -> Dict[str, Any]:
             """),
             {
                 "rid": payload.review_id,
-                "mc": 1 if model_correct else 0,
-                "rc": 1 if reviewer_correct else 0,
-                "beat": 1 if reviewer_beat else 0,
+                "mc": model_correct,
+                "rc": reviewer_correct,
+                "beat": reviewer_beat,
                 "factors": json.dumps(payload.followup_missing_factors),
                 "reason": payload.followup_reason,
                 "structured_explanation": structured_explanation,
                 "factor_tags": factor_tags_json,
-                "should_be_feature": (1 if should_be_feature else 0) if should_be_feature is not None else None,
+                "should_be_feature": should_be_feature,
                 "importance": importance,
                 "ts": datetime.utcnow().isoformat(),
             },

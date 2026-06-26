@@ -11,7 +11,9 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Dict, List
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
+
+from scripts.db_utils import create_database_engine, sql_bool_true
 
 logger = logging.getLogger("weekly_feedback_distribution")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s")
@@ -29,7 +31,7 @@ def _parse_sports(raw: str | None) -> List[str]:
     return []
 
 
-def load_reviewers(engine) -> List[Dict[str, Any]]:
+def load_reviewers(engine, allowlist: List[str] | None = None) -> List[Dict[str, Any]]:
     sql = text(
         """
         SELECT r.reviewer_id, r.name, r.email,
@@ -42,8 +44,12 @@ def load_reviewers(engine) -> List[Dict[str, Any]]:
     with engine.begin() as conn:
         rows = conn.execute(sql).mappings().all()
     result = []
+    allow = {e.strip().lower() for e in (allowlist or []) if e.strip()}
     for row in rows:
         if row["emails_enabled"] is not None and not bool(row["emails_enabled"]):
+            continue
+        email = (row["email"] or "").strip()
+        if allow and email.lower() not in allow:
             continue
         result.append(
             {
@@ -57,21 +63,23 @@ def load_reviewers(engine) -> List[Dict[str, Any]]:
 
 
 def load_reviewer_stats(engine, reviewer_id: str) -> Dict[str, Any]:
+    agree_true = sql_bool_true("pr.agree_with_model", engine)
+    beat_true = sql_bool_true("ro.reviewer_beat_model", engine)
     with engine.begin() as conn:
         total = conn.execute(
             text("SELECT COUNT(*) FROM prediction_reviews WHERE reviewer_id = :rid"),
             {"rid": reviewer_id},
         ).scalar() or 0
         agreed = conn.execute(
-            text("SELECT COUNT(*) FROM prediction_reviews WHERE reviewer_id = :rid AND agree_with_model = 1"),
+            text(f"SELECT COUNT(*) FROM prediction_reviews pr WHERE pr.reviewer_id = :rid AND {agree_true}"),
             {"rid": reviewer_id},
         ).scalar() or 0
         beat_ai = conn.execute(
             text(
-                """
+                f"""
                 SELECT COUNT(*) FROM review_outcomes ro
                 JOIN prediction_reviews pr ON ro.review_id = pr.review_id
-                WHERE pr.reviewer_id = :rid AND ro.reviewer_beat_model = 1
+                WHERE pr.reviewer_id = :rid AND {beat_true}
                 """
             ),
             {"rid": reviewer_id},
@@ -194,8 +202,10 @@ def main() -> None:
         logger.error("FEEDBACK_BASE_URL is required.")
         sys.exit(1)
 
-    engine = create_engine(db_url)
-    reviewers = load_reviewers(engine)
+    engine = create_database_engine(db_url)
+    allowlist_raw = os.getenv("WEEKLY_EMAIL_ALLOWLIST", "").strip()
+    allowlist = [e.strip() for e in allowlist_raw.split(",") if e.strip()] or None
+    reviewers = load_reviewers(engine, allowlist=allowlist)
     if not reviewers:
         logger.warning("No reviewers with email enabled were found.")
         sys.exit(0)

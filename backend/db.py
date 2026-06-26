@@ -7,11 +7,13 @@ from typing import Generator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from scripts.db_utils import normalize_database_url
+
 DEFAULT_SQLITE_URL = "sqlite:///./sports_analytics.db"
 
 # Read at import time but do NOT raise — the engine is built lazily so the
 # module can be imported without DATABASE_URL (e.g. during local dev or tests).
-DATABASE_URL: str = os.environ.get("DATABASE_URL") or DEFAULT_SQLITE_URL
+DATABASE_URL: str = normalize_database_url(os.environ.get("DATABASE_URL") or DEFAULT_SQLITE_URL)
 
 _engine_kwargs: dict = {"pool_pre_ping": True, "future": True}
 if DATABASE_URL.startswith("sqlite"):

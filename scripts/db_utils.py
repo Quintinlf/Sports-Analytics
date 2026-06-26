@@ -110,18 +110,42 @@ UNIFIED_PREDICTION_COLUMNS = [
 ]
 
 
+def normalize_database_url(url: str) -> str:
+    """Normalize Railway/Heroku postgres URLs for SQLAlchemy + psycopg2."""
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+psycopg2://", 1)
+    if url.startswith("postgresql://") and "+psycopg2" not in url:
+        return url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    return url
+
+
 def get_database_url(default: str = DEFAULT_SQLITE_URL) -> str:
     """Return the configured database URL, falling back to local SQLite."""
-    return os.getenv("DATABASE_URL") or default
+    raw = os.getenv("DATABASE_URL") or default
+    return normalize_database_url(raw)
 
 
 def create_database_engine(database_url: str | None = None):
     """Create a SQLAlchemy engine that works for both Postgres and SQLite."""
-    url = database_url or get_database_url()
+    url = normalize_database_url(database_url or get_database_url())
     engine_kwargs = {"pool_pre_ping": True}
     if url.startswith("sqlite"):
         engine_kwargs["connect_args"] = {"check_same_thread": False}
     return create_engine(url, **engine_kwargs)
+
+
+def sql_bool_true(column: str, engine: Engine) -> str:
+    """Dialect-safe SQL fragment for boolean true comparison."""
+    if _is_postgresql(engine):
+        return f"{column} IS TRUE"
+    return f"{column} = 1"
+
+
+def sql_case_bool_true(column: str, engine: Engine) -> str:
+    """Dialect-safe CASE expression counting boolean true rows."""
+    if _is_postgresql(engine):
+        return f"CASE WHEN {column} IS TRUE THEN 1 ELSE 0 END"
+    return f"CASE WHEN {column} = 1 THEN 1 ELSE 0 END"
 
 
 def _is_postgresql(engine: Engine) -> bool:
