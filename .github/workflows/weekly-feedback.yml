@@ -33,7 +33,7 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           FEEDBACK_BASE_URL: ${{ secrets.FEEDBACK_BASE_URL }}
           FEEDBACK_EMAIL_FROM: ${{ secrets.FEEDBACK_EMAIL_FROM }}
-        run: python scripts/send_weekly_feedback_form.py
+        run: python -m scripts.send_weekly_feedback_form
 
       - name: Upload logs on failure
         if: failure()
