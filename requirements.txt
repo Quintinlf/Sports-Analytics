@@ -34,6 +34,7 @@ fastapi>=0.111.0
 uvicorn>=0.30.0
 sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.0
+python-dotenv>=1.0.0
 
 # Optional: GPU-accelerated GPs (requires CUDA)
 # gpytorch>=1.6.0  # Uncomment if you have GPU and want scalable GPs

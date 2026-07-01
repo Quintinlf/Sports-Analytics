@@ -1,38 +1,58 @@
 from __future__ import annotations
 
-import os
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+from backend.config import DATABASE_URL as _RAW_DATABASE_URL
 from scripts.db_utils import normalize_database_url
 
 DEFAULT_SQLITE_URL = "sqlite:///./sports_analytics.db"
 
-# Read at import time but do NOT raise — the engine is built lazily so the
-# module can be imported without DATABASE_URL (e.g. during local dev or tests).
-DATABASE_URL: str = normalize_database_url(os.environ.get("DATABASE_URL") or DEFAULT_SQLITE_URL)
+DATABASE_URL: str = normalize_database_url(_RAW_DATABASE_URL or DEFAULT_SQLITE_URL)
 
-_engine_kwargs: dict = {"pool_pre_ping": True, "future": True}
+
+class Base(DeclarativeBase):
+    pass
+
+
+_engine_kwargs: dict = {"pool_pre_ping": True}
 if DATABASE_URL.startswith("sqlite"):
     _engine_kwargs["connect_args"] = {"check_same_thread": False}
+elif DATABASE_URL.startswith("postgresql"):
+    _engine_kwargs.update(
+        {
+            "pool_size": 5,
+            "max_overflow": 10,
+            "pool_recycle": 1800,
+        }
+    )
 
 engine = create_engine(DATABASE_URL, **_engine_kwargs)
 
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 def require_engine() -> None:
     """No-op kept for backward compatibility; engine is always initialised."""
 
 
-@contextmanager
-def get_db_session() -> Generator:
-    require_engine()
-    session = SessionLocal()
+def get_db() -> Generator[Session, None, None]:
+    """FastAPI dependency that yields a database session."""
+    db = SessionLocal()
     try:
-        yield session
+        yield db
     finally:
-        session.close()
+        db.close()
+
+
+@contextmanager
+def get_db_session() -> Generator[Session, None, None]:
+    """Backward-compatible context manager for existing route handlers."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

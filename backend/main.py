@@ -8,6 +8,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 print("[DEBUG] __name__ =", __name__)
 
+import backend.config  # noqa: F401 — load .env before other backend imports
+
 from datetime import date
 from typing import Any, Dict
 

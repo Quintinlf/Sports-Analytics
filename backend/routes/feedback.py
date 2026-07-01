@@ -29,10 +29,6 @@ from scripts.db_utils import (
     sql_bool_true,
     sql_case_bool_true,
 )
-from data.prediction_service import UnifiedPredictionService
-from data.nba_predictions_service import NBALivePredictionService, OffSeasonStrategy
-from data.mlb_predictions_service import MLBLivePredictionService
-from data.fifa_predictions_service import FIFALivePredictionService
 
 logger = logging.getLogger(__name__)
 
@@ -352,8 +348,12 @@ def _ensure_seed_predictions(db_engine) -> None:
 
 
 def init_platform(db_engine) -> None:
-    """Initialize platform: create tables, run migrations, fetch live data, fallback to seeds."""
-    logger.info("Initializing prediction platform...")
+    """Initialize platform: create tables, run migrations, seed demo data if empty.
+
+    Live prediction ingestion is handled separately by scripts/cron_daily_predictions.py
+    so the web service does not require ML dependencies at startup.
+    """
+    logger.info("Initializing feedback platform...")
     
     Base.metadata.create_all(bind=db_engine)
     ensure_unified_schema(db_engine)
@@ -434,35 +434,12 @@ def init_platform(db_engine) -> None:
             },
         )
 
-    # Check if predictions table is already populated
+    # Seed demo predictions when the table is empty (live ingest runs via cron/Actions)
     with db_engine.connect() as conn:
         count = conn.execute(text("SELECT COUNT(*) FROM predictions")).scalar()
 
-    # Phase 3: Wire up live data services
-    logger.info("Initializing live data orchestration suite...")
-    try:
-        service = UnifiedPredictionService(
-            nba_service=NBALivePredictionService(strategy=OffSeasonStrategy.EMPTY),
-            mlb_service=MLBLivePredictionService(),
-            fifa_service=FIFALivePredictionService()
-        )
-
-        logger.info("Polling live sports registries for current game schedules...")
-        live_predictions = service.fetch_all()
-
-        if live_predictions:
-            logger.info(f"Collected {len(live_predictions)} live predictions. Syncing to database...")
-            success = service.sync_to_database(db_engine, live_predictions, insert_prediction)
-            if success:
-                logger.info("Live data sync successful. Using live predictions.")
-                return
-
-    except Exception as e:
-        logger.error(f"Live data pipeline failed: {e}", exc_info=True)
-
-    # Fallback: Use static seed data if database is empty or live fetch failed
-    logger.warning("Live sports streams returned empty or error. Reverting to legacy SEED_PREDICTIONS...")
     if count == 0:
+        logger.info("Predictions table empty — seeding demo data.")
         for row in SEED_PREDICTIONS:
             try:
                 insert_prediction(db_engine, row)

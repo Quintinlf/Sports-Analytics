@@ -23,11 +23,7 @@ from sqlalchemy import create_engine
 # Path alignment logic if called directly
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from data.prediction_service import UnifiedPredictionService
-from data.nba_predictions_service import NBALivePredictionService, OffSeasonStrategy
-from data.mlb_predictions_service import MLBLivePredictionService
-from data.fifa_predictions_service import FIFALivePredictionService
-from scripts.db_utils import insert_prediction
+from scripts.prediction_runner import run_live_prediction_pipeline
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,26 +56,17 @@ def main() -> None:
         logger.error(f"Failed to initialize database engine: {e}", exc_info=True)
         sys.exit(1)
 
-    # Initialize sport-specific implementations
-    logger.info("Initializing sport-specific prediction services...")
-    nba = NBALivePredictionService(strategy=OffSeasonStrategy.EMPTY)
-    mlb = MLBLivePredictionService()
-    fifa = FIFALivePredictionService()
-
-    orchestrator = UnifiedPredictionService(nba_service=nba, mlb_service=mlb, fifa_service=fifa)
-
-    logger.info("Gathering feeds from active external providers...")
-    live_payloads = orchestrator.fetch_all()
-    logger.info(f"Retrieved a total of {len(live_payloads)} games across all pipelines.")
-
     if args.dry_run:
+        from scripts.prediction_runner import fetch_live_predictions
+
+        live_payloads = fetch_live_predictions()
+        logger.info(f"Retrieved a total of {len(live_payloads)} games across all pipelines.")
         logger.info("[DRY RUN MODE] Data processed successfully. Skipping database modification.")
         logger.info("=" * 80)
         sys.exit(0)
 
-    # Synchronize down to persistence engine
-    logger.info("Synchronizing predictions to database with cache clearing...")
-    success = orchestrator.sync_to_database(engine, live_payloads, insert_prediction)
+    logger.info("Running live prediction pipeline...")
+    success = run_live_prediction_pipeline(engine)
 
     logger.info("=" * 80)
     if success:

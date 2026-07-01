@@ -5,11 +5,20 @@ from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column
 
+from backend.db import Base
 
-class Base(DeclarativeBase):
-    pass
+__all__ = [
+    "Base",
+    "AnalystFeedback",
+    "FeatureSuggestion",
+    "PredictionReview",
+    "ReviewOutcome",
+    "Reviewer",
+    "ReviewerCustomSection",
+    "ReviewerPreference",
+]
 
 
 class AnalystFeedback(Base):

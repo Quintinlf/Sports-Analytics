@@ -1,5 +1,8 @@
+# Web API only — no ML / prediction dependencies.
+# Prediction ingest uses requirements-automation.txt via scripts/cron_daily_predictions.py.
 fastapi>=0.111.0
 uvicorn[standard]>=0.30.0
 sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.0
+python-dotenv>=1.0.0
 requests>=2.28.0
