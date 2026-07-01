@@ -2,8 +2,8 @@ name: Daily Predictions Sync
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # Runs at 12:00 AM UTC daily
-  workflow_dispatch:     # Allows manual pipeline testing from the UI
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 jobs:
   ingest-and-predict:
@@ -28,13 +28,15 @@ jobs:
           pip install -r requirements-automation.txt
 
       - name: Execute Daily Prediction Pipeline
-        run: python -m scripts.cron_daily_predictions
+        run: python scripts/cron_daily_predictions.py
 
       - name: Preserve Error Artifacts
+        if: failure()
+        run: mkdir -p logs
+
+      - name: Upload Logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: execution-failure-logs
-          path: ./*.log
-          retention-days: 5
-
+          path: logs/**
