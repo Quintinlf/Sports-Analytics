@@ -22,6 +22,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-automation.txt
 
+      - name: Initialize database schema
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m scripts.init_database
+
       - name: Send test digest to Quintin only
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

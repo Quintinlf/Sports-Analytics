@@ -29,6 +29,11 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -c "from backend.db import Base, engine; Base.metadata.create_all(bind=engine)"
 
+      - name: Initialize database schema
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m scripts.init_database
+
       - name: Send personalized weekly reviewer emails
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
