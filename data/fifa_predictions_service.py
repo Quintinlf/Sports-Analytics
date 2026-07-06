@@ -54,6 +54,7 @@ class FIFALivePredictionService:
                 ("Premier League", "4328"),
                 ("La Liga", "4335"),
                 ("Serie A", "4332"),
+                ("FIFA World Cup", "4429"),
             ]
             fixtures: List[Dict[str, Any]] = []
             for league_name, league_id in league_ids:

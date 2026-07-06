@@ -5,6 +5,7 @@ import os
 import hashlib
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from urllib.parse import unquote, urlparse
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
@@ -119,10 +120,103 @@ def normalize_database_url(url: str) -> str:
     return url
 
 
+def database_url_source() -> str:
+    """Return which env var supplied the active database URL."""
+    if os.getenv("SUPABASE_DATABASE_URL"):
+        return "SUPABASE_DATABASE_URL"
+    if os.getenv("SUPERBASE_DATABASE_URL"):
+        return "SUPERBASE_DATABASE_URL"
+    if os.getenv("DATABASE_URL"):
+        return "DATABASE_URL"
+    return "default"
+
+
+def resolve_database_url(
+    *,
+    default: str | None = DEFAULT_SQLITE_URL,
+    required: bool = False,
+) -> str:
+    """Prefer Supabase env vars, then DATABASE_URL, then optional default."""
+    raw = (
+        os.getenv("SUPABASE_DATABASE_URL")
+        or os.getenv("SUPERBASE_DATABASE_URL")
+        or os.getenv("DATABASE_URL")
+    )
+    if not raw:
+        if required:
+            raise RuntimeError(
+                "Missing SUPABASE_DATABASE_URL, SUPERBASE_DATABASE_URL, or DATABASE_URL."
+            )
+        if default is not None:
+            raw = default
+        else:
+            raise RuntimeError(
+                "Missing SUPABASE_DATABASE_URL, SUPERBASE_DATABASE_URL, or DATABASE_URL."
+            )
+    return normalize_database_url(raw)
+
+
+def format_database_target(url: str) -> str:
+    """Return host and database name for logging (credentials masked)."""
+    host, dbname = _parse_database_host_and_name(url)
+    if url.startswith("sqlite"):
+        return f"driver=sqlite path={dbname}"
+    return f"host={host} dbname={dbname}"
+
+
+def _parse_database_host_and_name(url: str) -> tuple[str, str]:
+    if url.startswith("sqlite"):
+        path = url.split("///", 1)[-1] if "///" in url else url
+        return "sqlite", path
+
+    parsed = urlparse(url)
+    host = parsed.hostname or "unknown"
+    port = parsed.port
+    dbname = unquote((parsed.path or "/").lstrip("/") or "postgres")
+    host_part = f"{host}:{port}" if port else host
+    return host_part, dbname
+
+
+def log_startup_database_diagnostics(engine: Engine, database_url: str) -> None:
+    """Log resolved DB target and prediction table snapshot (no credentials)."""
+    import logging
+
+    logger = logging.getLogger("startup.database")
+    source = database_url_source()
+    host, dbname = _parse_database_host_and_name(database_url)
+    display_host = host.split(":")[0] if not database_url.startswith("sqlite") else host
+
+    logger.info("Database source: %s", source)
+    logger.info("Host: %s", display_host)
+    logger.info("DB: %s", dbname)
+
+    try:
+        with engine.connect() as conn:
+            count = conn.execute(text("SELECT COUNT(*) FROM predictions")).scalar()
+            max_id = conn.execute(text("SELECT MAX(prediction_id) FROM predictions")).scalar()
+            usa_row = conn.execute(
+                text(
+                    """
+                    SELECT 1 FROM predictions
+                    WHERE home_team = 'USA' AND away_team = 'Belgium'
+                    LIMIT 1
+                    """
+                )
+            ).first()
+    except Exception as exc:
+        logger.info("Prediction count: N/A (query failed: %s)", exc)
+        logger.info("Max prediction id: N/A")
+        logger.info("USA vs Belgium found: N/A")
+        return
+
+    logger.info("Prediction count: %s", count)
+    logger.info("Max prediction id: %s", max_id if max_id is not None else "N/A")
+    logger.info("USA vs Belgium found: %s", "YES" if usa_row else "NO")
+
+
 def get_database_url(default: str = DEFAULT_SQLITE_URL) -> str:
     """Return the configured database URL, falling back to local SQLite."""
-    raw = os.getenv("DATABASE_URL") or default
-    return normalize_database_url(raw)
+    return resolve_database_url(default=default)
 
 
 def create_database_engine(database_url: str | None = None):

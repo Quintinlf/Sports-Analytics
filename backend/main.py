@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -18,9 +19,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from sqlalchemy import text
 
-from backend.db import get_db_session, engine, require_engine
+from backend.db import DATABASE_URL, get_db_session, engine, require_engine
 from backend.models import Base, AnalystFeedback, FeatureSuggestion
 from backend.routes.feedback import router as feedback_router, init_platform
+from scripts.db_utils import log_startup_database_diagnostics
 from backend.schemas import (
     FeedbackStatusResponse,
     FeedbackSubmitRequest,
@@ -30,6 +32,8 @@ from backend.schemas import (
 )
 
 _FRONTEND_DIR = Path(__file__).parent.parent / "frontend" / "feedback"
+
+logger = logging.getLogger(__name__)
 
 
 ANALYSTS = ["lamar", "anderson", "luis", "alex"]
@@ -274,6 +278,7 @@ app.include_router(feedback_router)
 @app.on_event("startup")
 def _init_db() -> None:
     require_engine()
+    log_startup_database_diagnostics(engine, DATABASE_URL)
     Base.metadata.create_all(bind=engine)
     # Seed predictions + create new review tables
     init_platform(engine)
