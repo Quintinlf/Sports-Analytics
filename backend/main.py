@@ -277,6 +277,7 @@ app.include_router(feedback_router)
 
 @app.on_event("startup")
 def _init_db() -> None:
+    print("STARTUP _init_db called", flush=True)
     require_engine()
     log_startup_database_diagnostics(engine, DATABASE_URL)
     Base.metadata.create_all(bind=engine)

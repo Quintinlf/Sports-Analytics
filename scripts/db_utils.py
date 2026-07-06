@@ -186,6 +186,11 @@ def log_startup_database_diagnostics(engine: Engine, database_url: str) -> None:
     host, dbname = _parse_database_host_and_name(database_url)
     display_host = host.split(":")[0] if not database_url.startswith("sqlite") else host
 
+    print("STARTUP DATABASE DIAGNOSTIC", flush=True)
+    print(f"Database source: {source}", flush=True)
+    print(f"Host: {display_host}", flush=True)
+    print(f"DB: {dbname}", flush=True)
+
     logger.info("Database source: %s", source)
     logger.info("Host: %s", display_host)
     logger.info("DB: %s", dbname)
@@ -204,14 +209,21 @@ def log_startup_database_diagnostics(engine: Engine, database_url: str) -> None:
                 )
             ).first()
     except Exception as exc:
+        print(f"Prediction count: N/A (query failed: {exc})", flush=True)
+        print("Max prediction id: N/A", flush=True)
+        print("USA vs Belgium found: N/A", flush=True)
         logger.info("Prediction count: N/A (query failed: %s)", exc)
         logger.info("Max prediction id: N/A")
         logger.info("USA vs Belgium found: N/A")
         return
 
+    found = "YES" if usa_row else "NO"
+    print(f"Prediction count: {count}", flush=True)
+    print(f"Max prediction id: {max_id if max_id is not None else 'N/A'}", flush=True)
+    print(f"USA vs Belgium found: {found}", flush=True)
     logger.info("Prediction count: %s", count)
     logger.info("Max prediction id: %s", max_id if max_id is not None else "N/A")
-    logger.info("USA vs Belgium found: %s", "YES" if usa_row else "NO")
+    logger.info("USA vs Belgium found: %s", found)
 
 
 def get_database_url(default: str = DEFAULT_SQLITE_URL) -> str:
