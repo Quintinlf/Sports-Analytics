@@ -175,7 +175,7 @@ async function loadPredictions() {
   grid.innerHTML = `<div class="spinner"></div>`;
 
   const query = selectedSport !== "ALL" ? `?sport=${encodeURIComponent(selectedSport)}` : "";
-  const res = await fetch(`${API}/api/feedback/predictions${query}`);
+  const res = await fetch(`${API}/api/feedback/predictions${query}`, { cache: "no-store" });
   if (!res.ok) { grid.innerHTML = `<p style="color:var(--red)">Failed to load predictions.</p>`; return; }
   const preds = await res.json();
   console.log(`[Feedback] Loaded ${preds.length} predictions for filter=${selectedSport}`);
@@ -189,12 +189,15 @@ async function loadPredictions() {
   for (const p of preds) {
     const sportUi = p.sport_ui || p.sport;
     const emoji = SPORT_EMOJI[sportUi] || "🏟";
+    const leagueLabel = p.league || "";
+    const isWorldCup = /world cup/i.test(leagueLabel);
     const tile = document.createElement("div");
-    tile.className = "pred-tile";
+    tile.className = "pred-tile" + (isWorldCup ? " pred-tile--world-cup" : "");
     tile.dataset.id = p.prediction_id;
     const dotCls = p.settled ? "settled" : "unsettled";
     tile.innerHTML = `
       <div class="sport-emoji">${emoji}</div>
+      ${leagueLabel ? `<div class="game-league">${leagueLabel}</div>` : ""}
       <div class="game-teams">${p.away_team} <span style="color:var(--muted)">@</span> ${p.home_team}</div>
       <div class="game-date">
         <span class="settled-dot ${dotCls}"></span>

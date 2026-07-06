@@ -11,6 +11,7 @@ from datetime import datetime, date, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import inspect as sa_inspect, text
 
@@ -46,7 +47,7 @@ LEAGUES: Dict[str, List[str]] = {
     "NBA":  ["NBA", "WNBA", "G League"],
     "FIFA": [
         "Premier League", "La Liga", "Bundesliga",
-        "Serie A", "Ligue 1", "MLS", "Champions League", "World Cup",
+        "Serie A", "Ligue 1", "MLS", "Champions League", "World Cup", "FIFA World Cup",
     ],
 }
 
@@ -756,15 +757,31 @@ def get_leagues(sport: str) -> Dict[str, Any]:
     return {"sport": sport_ui, "leagues": LEAGUES.get(sport_ui, [])}
 
 
+_FIFA_PREDICTIONS_SQL = """
+    SELECT prediction_id, sport, league, game_date, home_team, away_team,
+           predicted_winner, confidence_level, actual_home_score, actual_away_score,
+           actual_winner, correct, prediction_status
+    FROM predictions
+    WHERE sport IN ('SOCCER', 'FIFA')
+    ORDER BY
+        CASE WHEN LOWER(COALESCE(league, '')) LIKE '%world cup%' THEN 0 ELSE 1 END,
+        game_date ASC,
+        prediction_id DESC
+"""
+
+
 @router.get("/predictions")
-def list_predictions(sport: Optional[str] = None) -> List[Dict[str, Any]]:
+def list_predictions(sport: Optional[str] = None) -> JSONResponse:
     db_sport = _db_sport(sport) if sport else None
     with get_db_session() as session:
-        if db_sport:
+        if db_sport == "SOCCER":
+            rows = session.execute(text(_FIFA_PREDICTIONS_SQL)).mappings().all()
+        elif db_sport:
             rows = session.execute(
                 text("SELECT prediction_id, sport, league, game_date, home_team, away_team, "
                      "predicted_winner, confidence_level, actual_home_score, actual_away_score, "
-                     "actual_winner, correct, prediction_status FROM predictions WHERE sport = :s ORDER BY game_date DESC"),
+                     "actual_winner, correct, prediction_status FROM predictions WHERE sport = :s "
+                     "ORDER BY game_date DESC"),
                 {"s": db_sport},
             ).mappings().all()
         else:
@@ -780,8 +797,10 @@ def list_predictions(sport: Optional[str] = None) -> List[Dict[str, Any]]:
         d = dict(r)
         d["sport_ui"] = _ui_sport(d["sport"])
         d["settled"] = d["actual_home_score"] is not None
+        if d.get("game_date") is not None:
+            d["game_date"] = str(d["game_date"])
         result.append(d)
-    return result
+    return JSONResponse(content=result, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/debug/predictions")
