@@ -20,7 +20,7 @@ from sqlalchemy import inspect
 
 from backend.db import Base, engine
 import backend.models  # noqa: F401 — register every ORM model with Base.metadata
-from scripts.db_utils import ensure_unified_schema
+from scripts.db_utils import ensure_default_reviewers, ensure_unified_schema
 
 DEBUG_LOG = ROOT / "debug-ca0755.log"
 
@@ -75,6 +75,7 @@ def initialize_database() -> list[str]:
 
     Base.metadata.create_all(bind=engine)
     ensure_unified_schema(engine)
+    ensure_default_reviewers(engine)
 
     after = sorted(inspect(engine).get_table_names())
     missing = sorted(REQUIRED_TABLES - set(after))

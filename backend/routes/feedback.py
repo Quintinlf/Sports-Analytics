@@ -25,6 +25,7 @@ from backend.models import (
     ReviewerCustomSection,
 )
 from scripts.db_utils import (
+    ensure_default_reviewers,
     ensure_unified_schema,
     insert_prediction,
     sql_bool_true,
@@ -358,50 +359,9 @@ def init_platform(db_engine) -> None:
     
     Base.metadata.create_all(bind=db_engine)
     ensure_unified_schema(db_engine)
+    ensure_default_reviewers(db_engine)
 
-    # Migrate reviewers table: add email column if missing
     with db_engine.begin() as conn:
-        cols = [c["name"] for c in sa_inspect(db_engine).get_columns("reviewers")]
-        if "email" not in cols:
-            conn.execute(text("ALTER TABLE reviewers ADD COLUMN email TEXT"))
-        existing_quintin = conn.execute(
-            text(
-                """
-                SELECT reviewer_id
-                FROM reviewers
-                WHERE reviewer_id = :rid OR lower(name) = lower(:name)
-                LIMIT 1
-                """
-            ),
-            {"rid": "quintin", "name": "Quintin"},
-        ).first()
-        if existing_quintin:
-            conn.execute(
-                text(
-                    """
-                    UPDATE reviewers
-                    SET email = :email
-                    WHERE reviewer_id = :rid
-                      AND (email IS NULL OR email = 'quintin@example.com')
-                    """
-                ),
-                {"rid": existing_quintin[0], "email": "quintinlf7@gmail.com"},
-            )
-        else:
-            conn.execute(
-                text(
-                    """
-                    INSERT INTO reviewers (reviewer_id, name, email, created_at)
-                    VALUES (:rid, :name, :email, :ts)
-                    """
-                ),
-                {
-                    "rid": "quintin",
-                    "name": "Quintin",
-                    "email": "quintinlf7@gmail.com",
-                    "ts": datetime.utcnow().isoformat(),
-                },
-            )
         outcome_cols = [c["name"] for c in sa_inspect(db_engine).get_columns("review_outcomes")]
         for ddl in [
             ("structured_explanation", "TEXT"),
@@ -411,29 +371,6 @@ def init_platform(db_engine) -> None:
         ]:
             if ddl[0] not in outcome_cols:
                 conn.execute(text(f"ALTER TABLE review_outcomes ADD COLUMN {ddl[0]} {ddl[1]}"))
-
-        conn.execute(
-            text(
-                """
-                INSERT INTO reviewer_preferences
-                    (reviewer_id, favorite_sports, emails_enabled, wants_betting_section,
-                     wants_explanations, wants_postgame_reviews, email_frequency, updated_at)
-                VALUES
-                    (:rid, :sports, :emails_enabled, :wants_betting_section,
-                     :wants_explanations, :wants_postgame_reviews, 'weekly', :ts)
-                ON CONFLICT(reviewer_id) DO NOTHING
-                """
-            ),
-            {
-                "rid": "quintin",
-                "sports": json.dumps(["MLB", "NBA"]),
-                "emails_enabled": True,
-                "wants_betting_section": True,
-                "wants_explanations": True,
-                "wants_postgame_reviews": True,
-                "ts": datetime.utcnow().isoformat(),
-            },
-        )
 
     # Seed demo predictions when the table is empty (live ingest runs via cron/Actions)
     with db_engine.connect() as conn:

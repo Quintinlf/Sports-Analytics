@@ -394,6 +394,95 @@ def ensure_unified_schema(engine: Engine) -> None:
             )
 
 
+DEFAULT_REVIEWER_ID = "quintin"
+DEFAULT_REVIEWER_NAME = "Quintin"
+DEFAULT_REVIEWER_EMAIL = "quintinlf7@gmail.com"
+
+
+def ensure_default_reviewers(engine: Engine) -> None:
+    """Seed beta reviewer rows for automation paths that skip API startup."""
+    import logging
+
+    logger = logging.getLogger(__name__)
+    if not _table_exists(engine, "reviewers"):
+        logger.warning("reviewers table missing — skipping default reviewer seed")
+        return
+
+    ts = datetime.utcnow().isoformat()
+    with engine.begin() as conn:
+        cols = {c["name"] for c in inspect(engine).get_columns("reviewers")}
+        if "email" not in cols:
+            conn.execute(text("ALTER TABLE reviewers ADD COLUMN email TEXT"))
+
+        existing = conn.execute(
+            text(
+                """
+                SELECT reviewer_id
+                FROM reviewers
+                WHERE reviewer_id = :rid OR lower(name) = lower(:name)
+                LIMIT 1
+                """
+            ),
+            {"rid": DEFAULT_REVIEWER_ID, "name": DEFAULT_REVIEWER_NAME},
+        ).first()
+
+        if existing:
+            conn.execute(
+                text(
+                    """
+                    UPDATE reviewers
+                    SET email = :email
+                    WHERE reviewer_id = :rid
+                      AND (email IS NULL OR email = 'quintin@example.com')
+                    """
+                ),
+                {"rid": existing[0], "email": DEFAULT_REVIEWER_EMAIL},
+            )
+            reviewer_id = existing[0]
+        else:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO reviewers (reviewer_id, name, email, created_at)
+                    VALUES (:rid, :name, :email, :ts)
+                    """
+                ),
+                {
+                    "rid": DEFAULT_REVIEWER_ID,
+                    "name": DEFAULT_REVIEWER_NAME,
+                    "email": DEFAULT_REVIEWER_EMAIL,
+                    "ts": ts,
+                },
+            )
+            reviewer_id = DEFAULT_REVIEWER_ID
+
+        if _table_exists(engine, "reviewer_preferences"):
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO reviewer_preferences
+                        (reviewer_id, favorite_sports, emails_enabled, wants_betting_section,
+                         wants_explanations, wants_postgame_reviews, email_frequency, updated_at)
+                    VALUES
+                        (:rid, :sports, :emails_enabled, :wants_betting_section,
+                         :wants_explanations, :wants_postgame_reviews, 'weekly', :ts)
+                    ON CONFLICT(reviewer_id) DO NOTHING
+                    """
+                ),
+                {
+                    "rid": reviewer_id,
+                    "sports": json.dumps(["MLB", "NBA"]),
+                    "emails_enabled": True,
+                    "wants_betting_section": True,
+                    "wants_explanations": True,
+                    "wants_postgame_reviews": True,
+                    "ts": ts,
+                },
+            )
+
+    logger.info("Default reviewer seed ensured (reviewer_id=%s)", reviewer_id)
+
+
 def insert_prediction(engine: Engine, prediction_data: Dict[str, Any]) -> int:
     """Insert a unified prediction row and return its integer prediction_id."""
     ensure_unified_schema(engine)

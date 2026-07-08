@@ -13,7 +13,7 @@ from typing import Any, Dict, List
 
 from sqlalchemy import text
 
-from scripts.db_utils import create_database_engine, sql_bool_true
+from scripts.db_utils import create_database_engine, ensure_default_reviewers, sql_bool_true
 
 logger = logging.getLogger("weekly_feedback_distribution")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s")
@@ -194,7 +194,7 @@ def send_email(to_email: str, subject: str, html_content: str) -> None:
 
 def main() -> None:
     db_url = os.getenv("DATABASE_URL")
-    base_url = os.getenv("FEEDBACK_BASE_URL")
+    base_url = (os.getenv("FEEDBACK_BASE_URL") or "").rstrip("/")
     if not db_url:
         logger.error("DATABASE_URL is required.")
         sys.exit(1)
@@ -203,6 +203,8 @@ def main() -> None:
         sys.exit(1)
 
     engine = create_database_engine(db_url)
+    ensure_default_reviewers(engine)
+
     allowlist_raw = os.getenv("WEEKLY_EMAIL_ALLOWLIST", "").strip()
     allowlist = [e.strip() for e in allowlist_raw.split(",") if e.strip()] or None
     reviewers = load_reviewers(engine, allowlist=allowlist)
@@ -211,21 +213,35 @@ def main() -> None:
         sys.exit(0)
 
     sent = 0
+    failed = 0
     for reviewer in reviewers:
         favorite = reviewer["favorite_sports"][0] if reviewer["favorite_sports"] else "MLB"
-        stats = load_reviewer_stats(engine, reviewer["reviewer_id"])
-        upcoming = load_predictions(engine, "SOCCER" if favorite == "FIFA" else favorite, "UPCOMING")
-        completed = load_predictions(engine, "SOCCER" if favorite == "FIFA" else favorite, "FINAL")
-        html = render_email(reviewer, stats, upcoming, completed, base_url)
-        send_email(
-            to_email=reviewer["email"],
-            subject=f"Weekly AI Analyst Digest - {datetime.utcnow().strftime('%Y-%m-%d')}",
-            html_content=html,
-        )
-        sent += 1
-        logger.info("Sent reviewer digest to %s (%s)", reviewer["name"], reviewer["email"])
+        try:
+            stats = load_reviewer_stats(engine, reviewer["reviewer_id"])
+            upcoming = load_predictions(engine, "SOCCER" if favorite == "FIFA" else favorite, "UPCOMING")
+            completed = load_predictions(engine, "SOCCER" if favorite == "FIFA" else favorite, "FINAL")
+            html = render_email(reviewer, stats, upcoming, completed, base_url)
+            send_email(
+                to_email=reviewer["email"],
+                subject=f"Weekly AI Analyst Digest - {datetime.utcnow().strftime('%Y-%m-%d')}",
+                html_content=html,
+            )
+            sent += 1
+            logger.info("Sent reviewer digest to %s (%s)", reviewer["name"], reviewer["email"])
+        except Exception as exc:
+            failed += 1
+            logger.error(
+                "Failed to send digest to %s (%s): %s",
+                reviewer["name"],
+                reviewer["email"],
+                exc,
+                exc_info=True,
+            )
 
-    logger.info("Completed weekly distribution. emails_sent=%s", sent)
+    logger.info("Completed weekly distribution. emails_sent=%s emails_failed=%s", sent, failed)
+    if sent == 0 and reviewers:
+        logger.error("All email sends failed for %s reviewer(s).", len(reviewers))
+        sys.exit(1)
 
 
 if __name__ == "__main__":
