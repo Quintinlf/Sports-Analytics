@@ -112,7 +112,7 @@ UNIFIED_PREDICTION_COLUMNS = [
 
 
 def normalize_database_url(url: str) -> str:
-    """Normalize Railway/Heroku postgres URLs for SQLAlchemy + psycopg2."""
+    """Normalize Render/Heroku postgres URLs for SQLAlchemy + psycopg2."""
     if url.startswith("postgres://"):
         return url.replace("postgres://", "postgresql+psycopg2://", 1)
     if url.startswith("postgresql://") and "+psycopg2" not in url:

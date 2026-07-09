@@ -1,7 +1,7 @@
-"""Post-deploy validation for Railway or local environments.
+"""Post-deploy validation for Render or local environments.
 
 Usage:
-  FEEDBACK_BASE_URL=https://your-app.up.railway.app python scripts/validate_deployment.py
+  FEEDBACK_BASE_URL=https://your-service.onrender.com python scripts/validate_deployment.py
   TEST_REVIEWER_ID=quintin python scripts/validate_deployment.py
 """
 from __future__ import annotations
@@ -28,7 +28,7 @@ def check(path: str, expected_status: int = 200) -> str:
 
 def main() -> None:
     if not BASE_URL:
-        print("ERROR: FEEDBACK_BASE_URL is required (e.g. https://your-app.up.railway.app)")
+        print("ERROR: FEEDBACK_BASE_URL is required (e.g. https://your-service.onrender.com)")
         sys.exit(1)
 
     checks: List[str] = [

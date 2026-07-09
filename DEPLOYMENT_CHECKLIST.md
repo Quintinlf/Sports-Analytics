@@ -43,6 +43,7 @@ Your Sports Analytics platform now has a complete production automation lifecycl
 
 ### Documentation Files (for reference)
 
+📄 `RENDER_DEPLOYMENT.md` — Render web service + PostgreSQL deployment guide
 📄 `LIVE_DATA_REFACTOR.md` — Live data integration architecture
 📄 `LIVE_DATA_VERIFICATION.md` — Verification test results
 📄 `PRODUCTION_AUTOMATION_DEPLOYMENT.md` — Complete deployment guide

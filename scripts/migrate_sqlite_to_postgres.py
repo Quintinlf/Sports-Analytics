@@ -1,4 +1,4 @@
-"""One-time migration: local SQLite -> Railway PostgreSQL.
+"""One-time migration: local SQLite -> Render PostgreSQL.
 
 Usage:
   SQLITE_DATABASE_URL=sqlite:///./sports_analytics.db \\
