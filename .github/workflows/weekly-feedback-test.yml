@@ -37,4 +37,4 @@ jobs:
           FEEDBACK_BASE_URL: ${{ secrets.FEEDBACK_BASE_URL }}
           FEEDBACK_EMAIL_FROM: ${{ secrets.FEEDBACK_EMAIL_FROM }}
           WEEKLY_EMAIL_ALLOWLIST: quintinlf7@gmail.com
-        run: python scripts/send_weekly_feedback_form.py
+        run: python -m scripts.send_weekly_feedback_form
