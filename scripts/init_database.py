@@ -26,7 +26,11 @@ DEBUG_LOG = ROOT / "debug-ca0755.log"
 
 REQUIRED_TABLES = frozenset(
     {
+        "analyst_answers",
+        "analyst_case_studies",
+        "analyst_comments",
         "analyst_feedback",
+        "analyst_questions",
         "feature_suggestions",
         "predictions",
         "prediction_options",

@@ -11,7 +11,9 @@ const SPORT_COLORS = {
 };
 
 // State
-let currentReviewer = null;   // { reviewer_id, name }
+let currentReviewer = null;   // { reviewer_id, name, display_name, ... }
+let onboardingQuestions = [];
+let currentResearchQuestion = null;
 let currentPrediction = null; // full prediction object
 let currentReviewId = null;   // after pregame submit
 let selectedSport = "ALL";
@@ -52,6 +54,303 @@ function initStars() {
 }
 
 // ---------------------------------------------------------------------------
+// Analyst profile & onboarding
+// ---------------------------------------------------------------------------
+function welcomeLabel(data) {
+  return data.display_name || data.name || "Analyst";
+}
+
+function applyReviewerProfile(data) {
+  document.getElementById("reviewer-display-name").textContent = `Welcome, ${welcomeLabel(data)}`;
+
+  const roleBadge = document.getElementById("analyst-role-badge");
+  if (data.analyst_role && data.analyst_role !== "analyst") {
+    roleBadge.textContent = data.analyst_role.replace(/_/g, " ");
+    roleBadge.style.display = "inline-block";
+  } else {
+    roleBadge.style.display = "none";
+  }
+}
+
+async function refreshOnboardingAlert() {
+  if (!currentReviewer) return;
+  const alertEl = document.getElementById("onboarding-alert");
+  const res = await fetch(
+    `${API}/api/feedback/onboarding/status?reviewer_id=${encodeURIComponent(currentReviewer.reviewer_id)}`
+  );
+  if (!res.ok) {
+    alertEl.style.display = "none";
+    return;
+  }
+  const status = await res.json();
+  if (status.completed) {
+    alertEl.style.display = "none";
+    return;
+  }
+  alertEl.style.display = "block";
+  alertEl.textContent = `Onboarding: ${status.unanswered_count} question(s) remaining — your reasoning helps train the model.`;
+}
+
+async function loadOnboardingQuestions() {
+  const res = await fetch(`${API}/api/feedback/onboarding/questions`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+function renderOnboardingModal(questions) {
+  const root = document.getElementById("onboarding-questions");
+  root.innerHTML = "";
+  for (const q of questions) {
+    const block = document.createElement("div");
+    block.className = "onboarding-question";
+    const prompts = (q.prompts || []).map(p => `<p style="margin-bottom:8px">${p}</p>`).join("");
+    block.innerHTML = `
+      <h3>${q.title}</h3>
+      <div class="body">${q.body_markdown.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")}</div>
+      ${prompts}
+      <label for="onboard-${q.question_id}">Your answer</label>
+      <textarea id="onboard-${q.question_id}" data-question-id="${q.question_id}"></textarea>
+    `;
+    root.appendChild(block);
+  }
+}
+
+async function maybeShowOnboarding() {
+  if (!currentReviewer) return;
+  const statusRes = await fetch(
+    `${API}/api/feedback/onboarding/status?reviewer_id=${encodeURIComponent(currentReviewer.reviewer_id)}`
+  );
+  if (!statusRes.ok) return;
+  const status = await statusRes.json();
+  if (status.completed) return;
+
+  onboardingQuestions = await loadOnboardingQuestions();
+  if (!onboardingQuestions.length) return;
+
+  renderOnboardingModal(onboardingQuestions);
+  document.getElementById("onboarding-modal").style.display = "flex";
+}
+
+async function submitOnboarding() {
+  if (!currentReviewer || !onboardingQuestions.length) return;
+
+  const answers = [];
+  for (const q of onboardingQuestions) {
+    const el = document.getElementById(`onboard-${q.question_id}`);
+    const answer = (el?.value || "").trim();
+    if (!answer) {
+      toast("Please answer all onboarding questions", "error");
+      return;
+    }
+    answers.push({ question_id: q.question_id, answer });
+  }
+
+  const res = await fetch(`${API}/api/feedback/onboarding/answers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reviewer_id: currentReviewer.reviewer_id, answers }),
+  });
+  if (!res.ok) {
+    toast("Could not save onboarding answers", "error");
+    return;
+  }
+
+  document.getElementById("onboarding-modal").style.display = "none";
+  toast("Onboarding saved — thank you for training the model", "success");
+  refreshOnboardingAlert();
+}
+
+function applyReviewerSession(data, history, customSections) {
+  currentReviewer = {
+    reviewer_id: data.reviewer_id,
+    name: data.name,
+    display_name: data.display_name || data.name,
+    analyst_role: data.analyst_role,
+    onboarding_completed_at: data.onboarding_completed_at,
+  };
+
+  document.getElementById("reviewer-login").style.display = "none";
+  document.getElementById("reviewer-panel").style.display = "block";
+  document.getElementById("reviewer-history-wrap").style.display = "block";
+  document.getElementById("prediction-section").style.display = "block";
+
+  applyReviewerProfile(data);
+  renderReviewerStats(data.stats || data);
+  renderHistory(history || data.history || []);
+  renderCustomSections(customSections || data.custom_sections || []);
+
+  loadPredictions();
+  refreshOnboardingAlert();
+  maybeShowOnboarding();
+  loadResearchQuestion();
+  refreshPendingCaseStudies();
+}
+
+function renderMarkdownMath(el, text) {
+  if (!el || !text) return;
+  if (typeof marked !== "undefined") {
+    el.innerHTML = marked.parse(text);
+  } else {
+    el.textContent = text;
+  }
+  if (typeof renderMathInElement !== "undefined") {
+    renderMathInElement(el, { delimiters: [{ left: "$$", right: "$$", display: true }, { left: "$", right: "$", display: false }] });
+  }
+}
+
+async function loadResearchQuestion() {
+  if (!currentReviewer) return;
+  const card = document.getElementById("research-question-card");
+  try {
+    const res = await fetch(
+      `${API}/api/feedback/research/current?reviewer_id=${encodeURIComponent(currentReviewer.reviewer_id)}`
+    );
+    if (!res.ok) { card.style.display = "none"; return; }
+    currentResearchQuestion = await res.json();
+    card.style.display = "block";
+    document.getElementById("research-title").textContent = currentResearchQuestion.title;
+    const areaEl = document.getElementById("research-knowledge-area");
+    areaEl.textContent = currentResearchQuestion.knowledge_area || "Research";
+    renderMarkdownMath(document.getElementById("research-body"), currentResearchQuestion.body_markdown);
+    const promptsRoot = document.getElementById("research-prompts");
+    promptsRoot.innerHTML = "";
+    const existing = currentResearchQuestion.existing_answer?.answer || "";
+    (currentResearchQuestion.prompts || []).forEach((prompt, i) => {
+      const block = document.createElement("div");
+      block.className = "onboarding-question";
+      block.innerHTML = `<label>${prompt}</label><textarea id="research-answer-${i}" data-prompt="${prompt}">${existing}</textarea>`;
+      promptsRoot.appendChild(block);
+    });
+    loadComments("research_question", currentResearchQuestion.question_id, "research-comments");
+    const compose = document.getElementById("research-comment-compose");
+    if (compose) compose.style.display = "block";
+  } catch {
+    card.style.display = "none";
+  }
+}
+
+async function submitResearchAnswer() {
+  if (!currentReviewer || !currentResearchQuestion) return;
+  const prompts = currentResearchQuestion.prompts || [];
+  const parts = prompts.map((p, i) => {
+    const el = document.getElementById(`research-answer-${i}`);
+    return `${p}\n${(el?.value || "").trim()}`;
+  });
+  const answer = parts.join("\n\n").trim();
+  if (!answer) { toast("Please answer the research question", "error"); return; }
+  const res = await fetch(`${API}/api/feedback/research/answers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      reviewer_id: currentReviewer.reviewer_id,
+      answers: [{
+        question_id: currentResearchQuestion.question_id,
+        answer,
+        knowledge_area: currentResearchQuestion.knowledge_area,
+      }],
+    }),
+  });
+  if (!res.ok) { toast("Could not save research answer", "error"); return; }
+  toast("Research answer saved — thank you", "success");
+  loadResearchQuestion();
+}
+
+async function refreshPendingCaseStudies() {
+  if (!currentReviewer) return;
+  const alertEl = document.getElementById("case-study-alert");
+  const res = await fetch(
+    `${API}/api/feedback/case-studies/pending?reviewer_id=${encodeURIComponent(currentReviewer.reviewer_id)}`
+  );
+  if (!res.ok) { alertEl.style.display = "none"; return; }
+  const pending = await res.json();
+  if (!pending.length) {
+    alertEl.style.display = "none";
+    document.getElementById("case-study-section").style.display = "none";
+    return;
+  }
+  alertEl.style.display = "block";
+  alertEl.textContent = `${pending.length} case study(ies) needed — you beat the AI. Help teach the model why.`;
+  const first = pending[0];
+  document.getElementById("case-study-section").style.display = "block";
+  document.getElementById("case-study-review-id").value = first.review_id;
+  loadComments("case_study", first.review_id, "case-study-comments");
+}
+
+async function submitCaseStudy() {
+  const reviewId = document.getElementById("case-study-review-id").value;
+  if (!reviewId || !currentReviewer) return;
+  const payload = {
+    review_id: reviewId,
+    reviewer_id: currentReviewer.reviewer_id,
+    ai_missed: document.getElementById("cs-ai-missed").value.trim(),
+    decision_factors: document.getElementById("cs-decision-factors").value.trim(),
+    missing_variables: document.getElementById("cs-missing-variables").value.trim(),
+    data_sources: document.getElementById("cs-data-sources").value.trim(),
+    confidence_rating: +document.getElementById("cs-confidence").value || 4,
+  };
+  if (!payload.ai_missed || !payload.decision_factors) {
+    toast("Please complete the case study fields", "error");
+    return;
+  }
+  const res = await fetch(`${API}/api/feedback/case-studies`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) { toast("Could not save case study", "error"); return; }
+  toast("Case study saved — published to training data", "success");
+  refreshPendingCaseStudies();
+}
+
+async function loadComments(targetType, targetId, containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+  const res = await fetch(
+    `${API}/api/feedback/comments?target_type=${encodeURIComponent(targetType)}&target_id=${encodeURIComponent(targetId)}`
+  );
+  if (!res.ok) { root.innerHTML = ""; return; }
+  const comments = await res.json();
+  root.innerHTML = "<p class='conf-label'>Discussion</p>";
+  for (const c of comments) {
+    const el = document.createElement("div");
+    el.className = "comment-item";
+    const name = c.first_name || c.name || "Analyst";
+    el.innerHTML = `<strong>${name}</strong><p>${c.body}</p>`;
+    root.appendChild(el);
+  }
+}
+
+async function submitComment(targetType, targetId, inputId, containerId) {
+  if (!currentReviewer) { toast("Please log in first", "error"); return; }
+  const input = document.getElementById(inputId);
+  const body = (input?.value || "").trim();
+  if (!body) { toast("Please enter a comment", "error"); return; }
+  const res = await fetch(`${API}/api/feedback/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      reviewer_id: currentReviewer.reviewer_id,
+      target_type: targetType,
+      target_id: targetId,
+      body,
+    }),
+  });
+  if (!res.ok) { toast("Could not post comment", "error"); return; }
+  input.value = "";
+  toast("Comment posted", "success");
+  loadComments(targetType, targetId, containerId);
+}
+
+function updateDisagreeFields() {
+  const pickEl = document.querySelector('input[name="who-wins"]:checked');
+  const group = document.getElementById("primary-variable-group");
+  if (!pickEl || !currentPrediction) { group.style.display = "none"; return; }
+  const pick = pickEl.value === "home" ? currentPrediction.home_team : currentPrediction.away_team;
+  const disagree = pick.toLowerCase() !== (currentPrediction.predicted_winner || "").toLowerCase();
+  group.style.display = disagree ? "block" : "none";
+}
+
+// ---------------------------------------------------------------------------
 // Reviewer login
 // ---------------------------------------------------------------------------
 async function handleReviewerLogin() {
@@ -66,20 +365,7 @@ async function handleReviewerLogin() {
   if (!res.ok) { toast("Could not load reviewer", "error"); return; }
 
   const data = await res.json();
-  currentReviewer = { reviewer_id: data.reviewer_id, name: data.name };
-
-  // Show panel
-  document.getElementById("reviewer-login").style.display = "none";
-  document.getElementById("reviewer-panel").style.display = "block";
-  document.getElementById("reviewer-display-name").textContent = data.name;
-
-  renderReviewerStats(data.stats);
-  renderHistory(data.history);
-  renderCustomSections(data.custom_sections || []);
-
-  // Show main sections
-  document.getElementById("prediction-section").style.display = "block";
-  loadPredictions();
+  applyReviewerSession(data, data.history, data.custom_sections);
 }
 
 function renderCustomSections(sections) {
@@ -341,6 +627,31 @@ function renderAICard(pred) {
     </div>
   `;
 
+  const mlbBlock = document.getElementById("mlb-context-block");
+  const warnBlock = document.getElementById("missing-data-warnings");
+  if ((pred.sport_ui || pred.sport) === "MLB" && pred.starting_pitchers) {
+    const hp = pred.starting_pitchers.home || {};
+    const ap = pred.starting_pitchers.away || {};
+    mlbBlock.style.display = "block";
+    mlbBlock.innerHTML = `
+      <div class="conf-label" style="margin-bottom:8px">Starting Pitchers</div>
+      <div class="metric-cards">
+        <div class="metric-card"><div class="k">Away: ${ap.name || "TBD"}</div><div class="v">ERA ${ap.era ?? "—"} · WHIP ${ap.whip ?? "—"}</div></div>
+        <div class="metric-card"><div class="k">Home: ${hp.name || "TBD"}</div><div class="v">ERA ${hp.era ?? "—"} · WHIP ${hp.whip ?? "—"}</div></div>
+      </div>`;
+  } else {
+    mlbBlock.style.display = "none";
+    mlbBlock.innerHTML = "";
+  }
+  const warnings = pred.missing_data_warnings || [];
+  if (warnings.length) {
+    warnBlock.style.display = "block";
+    warnBlock.textContent = "Missing data: " + warnings.map(w => w.replace(/_/g, " ")).join(", ");
+  } else {
+    warnBlock.style.display = "none";
+    warnBlock.textContent = "";
+  }
+
   document.getElementById("ai-card").style.display = "block";
 }
 
@@ -381,6 +692,12 @@ function showPregameSection() {
   document.querySelectorAll('input[name="bet-size"]').forEach(r => r.checked = false);
   document.querySelectorAll('input[name="missing_factor"]').forEach(r => r.checked = false);
   document.getElementById("pregame-notes").value = "";
+  document.getElementById("primary-decision-variable").value = "";
+  document.getElementById("disagree-explain").value = "";
+  document.getElementById("primary-variable-group").style.display = "none";
+  document.querySelectorAll('input[name="who-wins"]').forEach(r => {
+    r.onchange = updateDisagreeFields;
+  });
 
   // Update team labels in who-wins
   if (currentPrediction) {
@@ -407,6 +724,12 @@ async function submitPregame() {
   const missingFactors = [...document.querySelectorAll('input[name="missing_factor"]:checked')]
     .map(el => el.value);
 
+  let notes = document.getElementById("pregame-notes").value.trim() || null;
+  const disagreeExplain = document.getElementById("disagree-explain").value.trim();
+  if (!agreeWithModel && disagreeExplain) {
+    notes = [notes, disagreeExplain].filter(Boolean).join("\n\n");
+  }
+
   const payload = {
     prediction_id: currentPrediction.prediction_id,
     reviewer_id: currentReviewer.reviewer_id,
@@ -415,7 +738,8 @@ async function submitPregame() {
     would_bet: betEl.value,
     agree_with_model: agreeWithModel,
     missing_factors: missingFactors,
-    pregame_notes: document.getElementById("pregame-notes").value.trim() || null,
+    pregame_notes: notes,
+    primary_decision_variable: agreeWithModel ? null : (document.getElementById("primary-decision-variable").value || null),
   };
 
   const res = await fetch(`${API}/api/feedback/prediction-reviews`, {
@@ -577,6 +901,9 @@ async function submitPostgame() {
   document.getElementById("postgame-submit-btn").textContent = "Submitted ✓";
 
   refreshReviewerStats();
+  if (data.reviewer_beat_model) {
+    refreshPendingCaseStudies();
+  }
 }
 
 async function refreshReviewerStats() {
@@ -609,31 +936,41 @@ document.addEventListener("DOMContentLoaded", () => {
   if (urlReviewerId) {
     fetch(`${API}/api/feedback/reviewers/${encodeURIComponent(urlReviewerId)}/stats`)
       .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (!data) return; // reviewer not found — fall through to manual login
-        currentReviewer = { reviewer_id: urlReviewerId, name: data.name };
-        document.getElementById("reviewer-login").style.display = "none";
-        document.getElementById("reviewer-panel").style.display = "block";
-        document.getElementById("reviewer-display-name").textContent = data.name;
-        renderReviewerStats(data);
-        renderHistory([]); // populated below
-        renderCustomSections([]);
-        document.getElementById("prediction-section").style.display = "block";
-        loadPredictions();
-        fetch(`${API}/api/feedback/reviewers/${encodeURIComponent(urlReviewerId)}/history`)
-          .then(r => r.ok ? r.json() : [])
-          .then(renderHistory);
-        fetch(`${API}/api/feedback/reviewers/${encodeURIComponent(urlReviewerId)}/custom-sections`)
-          .then(r => r.ok ? r.json() : [])
-          .then(renderCustomSections);
+      .then(async data => {
+        if (!data) return;
+        const histRes = await fetch(`${API}/api/feedback/reviewers/${encodeURIComponent(urlReviewerId)}/history`);
+        const history = histRes.ok ? await histRes.json() : [];
+        const sectRes = await fetch(`${API}/api/feedback/reviewers/${encodeURIComponent(urlReviewerId)}/custom-sections`);
+        const sections = sectRes.ok ? await sectRes.json() : [];
+        applyReviewerSession(data, history, sections);
       })
-      .catch(() => {}); // network error → fall through to manual login
+      .catch(() => {});
   }
 
   document.getElementById("login-btn").addEventListener("click", handleReviewerLogin);
   document.getElementById("reviewer-name-input").addEventListener("keydown", e => {
     if (e.key === "Enter") handleReviewerLogin();
   });
+
+  document.getElementById("onboarding-submit-btn").addEventListener("click", submitOnboarding);
+  document.getElementById("onboarding-alert").addEventListener("click", maybeShowOnboarding);
+  document.getElementById("research-submit-btn").addEventListener("click", submitResearchAnswer);
+  document.getElementById("research-comment-btn").addEventListener("click", () => {
+    if (!currentResearchQuestion) return;
+    submitComment(
+      "research_question",
+      currentResearchQuestion.question_id,
+      "research-comment-input",
+      "research-comments"
+    );
+  });
+  document.getElementById("case-study-submit-btn").addEventListener("click", submitCaseStudy);
+  document.getElementById("case-study-comment-btn").addEventListener("click", () => {
+    const reviewId = document.getElementById("case-study-review-id").value;
+    if (!reviewId) return;
+    submitComment("case_study", reviewId, "case-study-comment-input", "case-study-comments");
+  });
+  document.getElementById("case-study-alert").addEventListener("click", refreshPendingCaseStudies);
 
   document.getElementById("pregame-submit-btn").addEventListener("click", submitPregame);
   document.getElementById("postgame-submit-btn").addEventListener("click", submitPostgame);

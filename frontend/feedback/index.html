@@ -3,10 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Sports Analyst Feedback</title>
+  <title>AI Analyst Training</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/feedback/styles.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
 </head>
 <body>
 
@@ -15,55 +16,152 @@
   <div class="inner">
     <div class="logo">🤖</div>
     <div>
-      <h1>AI Sports Analyst Feedback</h1>
-      <p>Review predictions · Challenge the model · Help it learn from disagreements</p>
+      <h1>AI Analyst Training</h1>
+      <p>Challenge predictions · Explain your reasoning · Train the model</p>
     </div>
   </div>
 </header>
 
 <div class="page-wrap">
 
-  <!-- ── Reviewer Memory ───────────────────────────────────── -->
-  <div class="card flat" id="reviewer-section">
-    <p class="section-title">Reviewer</p>
+  <div id="dashboard-main">
 
-    <!-- Login form (shown first) -->
-    <div id="reviewer-login">
-      <p style="color:var(--text-dim);margin-bottom:14px;font-size:.9rem">Enter your name to load your history and stats.</p>
-      <div class="login-row">
-        <input type="text" id="reviewer-name-input" placeholder="Your name (e.g. Daniel)" autocomplete="off" />
-        <button class="btn btn-primary" id="login-btn">Continue →</button>
+    <!-- ── Analyst Identity ─────────────────────────────────── -->
+    <div class="card flat" id="reviewer-section">
+      <p class="section-title">Analyst</p>
+
+      <div id="reviewer-login">
+        <p style="color:var(--text-dim);margin-bottom:14px;font-size:.9rem">Enter your name to load your analyst profile and history.</p>
+        <div class="login-row">
+          <input type="text" id="reviewer-name-input" placeholder="Your name (e.g. Lamar)" autocomplete="off" />
+          <button class="btn btn-primary" id="login-btn">Continue →</button>
+        </div>
+      </div>
+
+      <div id="reviewer-panel">
+        <div id="dashboard-identity">
+          <div class="reviewer-welcome" id="reviewer-display-name"></div>
+          <div class="analyst-role-badge" id="analyst-role-badge" style="display:none"></div>
+          <div id="onboarding-alert" class="alert-banner" style="display:none"></div>
+          <div id="case-study-alert" class="alert-banner case-study-alert" style="display:none"></div>
+
+          <div id="research-question-card" class="card research-card" style="display:none">
+            <p class="section-title" style="margin-bottom:8px">Current Research Question</p>
+            <div class="knowledge-badge" id="research-knowledge-area"></div>
+            <h3 id="research-title"></h3>
+            <div id="research-body" class="research-body"></div>
+            <div id="research-prompts"></div>
+            <button class="btn btn-primary" id="research-submit-btn" style="margin-top:12px">Submit Research Answer</button>
+            <div id="research-comments" class="comment-thread"></div>
+            <div class="comment-compose" id="research-comment-compose" style="display:none;margin-top:12px">
+              <textarea id="research-comment-input" rows="2" placeholder="Add to the discussion…"></textarea>
+              <button class="btn btn-secondary" id="research-comment-btn" style="margin-top:8px">Post Comment</button>
+            </div>
+          </div>
+
+          <div class="stat-chips">
+            <div class="stat-chip">
+              <span class="val" id="stat-total">0</span>
+              <span class="lbl">Predictions</span>
+            </div>
+            <div class="stat-chip">
+              <span class="val" id="stat-agree">—</span>
+              <span class="lbl">Model agreement</span>
+            </div>
+            <div class="stat-chip">
+              <span class="val" id="stat-beat">0</span>
+              <span class="lbl">Beat AI</span>
+            </div>
+            <div class="stat-chip">
+              <span class="val" id="stat-acc">—</span>
+              <span class="lbl">Your accuracy</span>
+            </div>
+          </div>
+
+          <div id="sport-chips" class="stat-chips"></div>
+          <div id="reviewer-custom-sections"></div>
+        </div>
       </div>
     </div>
 
-    <!-- Reviewer panel (shown after login) -->
-    <div id="reviewer-panel">
-      <div class="reviewer-name" id="reviewer-display-name"></div>
+    <!-- ── Predictions (mobile-first: above history) ─────────── -->
+    <div id="prediction-section" style="display:none">
+      <p class="section-title">AI Predictions</p>
 
-      <div class="stat-chips">
-        <div class="stat-chip">
-          <span class="val" id="stat-total">0</span>
-          <span class="lbl">Predictions</span>
-        </div>
-        <div class="stat-chip">
-          <span class="val" id="stat-agree">—</span>
-          <span class="lbl">Model agreement</span>
-        </div>
-        <div class="stat-chip">
-          <span class="val" id="stat-beat">0</span>
-          <span class="lbl">Beat AI</span>
-        </div>
-        <div class="stat-chip">
-          <span class="val" id="stat-acc">—</span>
-          <span class="lbl">Your accuracy</span>
-        </div>
+      <div class="sport-tabs" id="sport-tabs">
+        <button type="button" class="sport-tab active" data-sport="ALL">ALL</button>
+        <button type="button" class="sport-tab" data-sport="MLB">MLB ⚾</button>
+        <button type="button" class="sport-tab" data-sport="NBA">NBA 🏀</button>
+        <button type="button" class="sport-tab" data-sport="FIFA">FIFA ⚽</button>
       </div>
 
-      <div id="sport-chips" class="stat-chips"></div>
-      <div id="reviewer-custom-sections"></div>
+      <div id="pred-grid" class="pred-grid">
+        <div class="empty-state"><div class="icon">⏳</div><p>Loading predictions…</p></div>
+      </div>
 
-      <!-- History table -->
-      <div class="history-table-wrap">
+      <div class="card" id="ai-card">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+          <span id="ai-sport-emoji" style="font-size:1.6rem"></span>
+          <span id="ai-sport-label" style="font-weight:700;color:var(--text-dim);font-size:.85rem;text-transform:uppercase;letter-spacing:1px"></span>
+        </div>
+
+        <div class="matchup-row">
+          <div class="team-block">
+            <div class="team-logo-circle" id="ai-away-initials"></div>
+            <div class="team-name" id="ai-away-name"></div>
+            <div style="font-size:.72rem;color:var(--text-dim)">Away</div>
+          </div>
+          <div class="vs-badge">VS</div>
+          <div class="team-block">
+            <div class="team-logo-circle" id="ai-home-initials"></div>
+            <div class="team-name" id="ai-home-name"></div>
+            <div style="font-size:.72rem;color:var(--text-dim)">Home</div>
+          </div>
+        </div>
+
+        <div class="game-meta" id="ai-game-meta"></div>
+        <div class="offseason-banner" id="offseason-banner"></div>
+        <div id="mlb-context-block" class="mlb-context-block" style="display:none"></div>
+        <div id="missing-data-warnings" class="missing-warnings" style="display:none"></div>
+
+        <div class="prediction-banner">
+          <div>
+            <div class="label">AI Predicts</div>
+            <div class="winner" id="ai-winner"></div>
+          </div>
+          <div style="margin-left:auto">
+            <span id="conf-badge-label" class="conf-badge"></span>
+          </div>
+        </div>
+
+        <div class="conf-block">
+          <div class="conf-label">Confidence</div>
+          <div class="conf-bar-track">
+            <div class="conf-bar-fill" id="conf-bar-fill"></div>
+          </div>
+          <div class="conf-pct" id="conf-pct-label">0%</div>
+        </div>
+
+        <div>
+          <div class="conf-label" style="margin-bottom:10px">Why the AI thinks this</div>
+          <div id="explanation-cards" class="metric-cards"></div>
+          <div class="feature-bars" id="feature-bars" style="margin-top:12px"></div>
+        </div>
+
+        <div class="card flat" style="margin-top:16px">
+          <div class="conf-label" style="margin-bottom:6px">Experimental Betting Signals</div>
+          <p style="font-size:.85rem;color:var(--text-dim);margin-bottom:8px">
+            Experimental betting signals. Feedback is being collected before official recommendations.
+          </p>
+          <div id="exp-betting"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── History (below predictions on mobile) ─────────────── -->
+    <div id="reviewer-history-wrap" style="display:none">
+      <p class="section-title">Your Review History</p>
+      <div class="card flat history-table-wrap">
         <table class="history-table">
           <thead>
             <tr>
@@ -81,250 +179,223 @@
         </table>
       </div>
     </div>
-  </div>
 
-  <!-- ── Section 1: Choose a Prediction ───────────────────── -->
-  <div id="prediction-section" style="display:none">
-    <p class="section-title">AI Prediction</p>
+    <!-- ── Pregame Human Review ─────────────────────────────── -->
+    <div id="pregame-section">
+      <p class="section-title">Pregame Human Review</p>
 
-    <div class="sport-tabs" id="sport-tabs">
-      <button type="button" class="sport-tab active" data-sport="ALL">ALL</button>
-      <button type="button" class="sport-tab" data-sport="MLB">MLB ⚾</button>
-      <button type="button" class="sport-tab" data-sport="NBA">NBA 🏀</button>
-      <button type="button" class="sport-tab" data-sport="FIFA">FIFA ⚽</button>
-    </div>
-
-    <div id="pred-grid" class="pred-grid">
-      <div class="empty-state"><div class="icon">⏳</div><p>Loading predictions…</p></div>
-    </div>
-
-    <!-- AI card (hidden until prediction selected) -->
-    <div class="card" id="ai-card">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-        <span id="ai-sport-emoji" style="font-size:1.6rem"></span>
-        <span id="ai-sport-label" style="font-weight:700;color:var(--text-dim);font-size:.85rem;text-transform:uppercase;letter-spacing:1px"></span>
-      </div>
-
-      <!-- Matchup -->
-      <div class="matchup-row">
-        <div class="team-block">
-          <div class="team-logo-circle" id="ai-away-initials"></div>
-          <div class="team-name" id="ai-away-name"></div>
-          <div style="font-size:.72rem;color:var(--text-dim)">Away</div>
-        </div>
-        <div class="vs-badge">VS</div>
-        <div class="team-block">
-          <div class="team-logo-circle" id="ai-home-initials"></div>
-          <div class="team-name" id="ai-home-name"></div>
-          <div style="font-size:.72rem;color:var(--text-dim)">Home</div>
-        </div>
-      </div>
-
-      <div class="game-meta" id="ai-game-meta"></div>
-      <div class="offseason-banner" id="offseason-banner"></div>
-
-      <!-- Prediction banner -->
-      <div class="prediction-banner">
-        <div>
-          <div class="label">AI Predicts</div>
-          <div class="winner" id="ai-winner"></div>
-        </div>
-        <div style="margin-left:auto">
-          <span id="conf-badge-label" class="conf-badge"></span>
-        </div>
-      </div>
-
-      <!-- Confidence bar -->
-      <div class="conf-block">
-        <div class="conf-label">Confidence</div>
-        <div class="conf-bar-track">
-          <div class="conf-bar-fill" id="conf-bar-fill"></div>
-        </div>
-        <div class="conf-pct" id="conf-pct-label">0%</div>
-      </div>
-
-      <!-- Feature breakdown -->
-      <div>
-        <div class="conf-label" style="margin-bottom:10px">Why the AI thinks this</div>
-        <div id="explanation-cards" class="metric-cards"></div>
-        <div class="feature-bars" id="feature-bars" style="margin-top:12px"></div>
-      </div>
-
-      <div class="card flat" style="margin-top:16px">
-        <div class="conf-label" style="margin-bottom:6px">Experimental Betting Signals</div>
-        <p style="font-size:.85rem;color:var(--text-dim);margin-bottom:8px">
-          Experimental betting signals. Feedback is being collected before official recommendations.
-        </p>
-        <div id="exp-betting"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Section 2: Pregame Human Review ──────────────────── -->
-  <div id="pregame-section">
-    <p class="section-title">Pregame Human Review</p>
-
-    <div class="card">
-      <!-- Who wins -->
-      <div class="form-group" style="margin-bottom:20px">
-        <label>Who wins?</label>
-        <div class="radio-group">
-          <div class="radio-btn">
-            <input type="radio" id="pick-home" name="who-wins" value="home" />
-            <label for="pick-home" id="who-home-label">🏠 Home</label>
-          </div>
-          <div class="radio-btn">
-            <input type="radio" id="pick-away" name="who-wins" value="away" />
-            <label for="pick-away" id="who-away-label">✈️ Away</label>
-          </div>
-        </div>
-      </div>
-
-      <!-- Confidence stars -->
-      <div class="form-group" style="margin-bottom:20px">
-        <label>Your confidence</label>
-        <div class="stars-group">
-          <button type="button" class="star-btn dim" data-val="1">★</button>
-          <button type="button" class="star-btn dim" data-val="2">★</button>
-          <button type="button" class="star-btn dim" data-val="3">★</button>
-          <button type="button" class="star-btn dim" data-val="4">★</button>
-          <button type="button" class="star-btn dim" data-val="5">★</button>
-        </div>
-        <input type="hidden" id="reviewer-confidence" value="" />
-      </div>
-
-      <!-- Would you bet? -->
-      <div class="form-group" style="margin-bottom:20px">
-        <label>Would you bet?</label>
-        <div class="bet-group">
-          <div class="radio-btn">
-            <input type="radio" id="bet-no"     name="bet-size" value="no"     />
-            <label for="bet-no">No</label>
-          </div>
-          <div class="radio-btn">
-            <input type="radio" id="bet-small"  name="bet-size" value="small"  />
-            <label for="bet-small">Small bet</label>
-          </div>
-          <div class="radio-btn">
-            <input type="radio" id="bet-medium" name="bet-size" value="medium" />
-            <label for="bet-medium">Medium bet</label>
-          </div>
-          <div class="radio-btn">
-            <input type="radio" id="bet-large"  name="bet-size" value="large"  />
-            <label for="bet-large">Large bet</label>
-          </div>
-        </div>
-      </div>
-
-      <!-- Missing factors (dynamic per sport) -->
-      <div class="form-group" style="margin-bottom:20px">
-        <label>What might the model be missing?</label>
-        <div class="check-group" id="missing-factors-group"></div>
-      </div>
-
-      <!-- Pregame notes -->
-      <div class="form-group" style="margin-bottom:24px">
-        <label>Scouting notes</label>
-        <textarea id="pregame-notes" placeholder="What are you seeing that the AI might be missing?"></textarea>
-      </div>
-
-      <button class="btn btn-primary" id="pregame-submit-btn" style="width:100%">
-        Submit Pregame Review
-      </button>
-    </div>
-  </div>
-
-  <!-- ── Section 3: Postgame Reflection ───────────────────── -->
-  <div id="postgame-section">
-    <p class="section-title">Postgame Reflection</p>
-
-    <input type="hidden" id="postgame-review-id" value="" />
-
-    <div class="card">
-      <!-- Score -->
-      <div class="score-display">
-        <div class="score-team">
-          <div class="score-team-name" id="pg-away-team">Away</div>
-          <div class="score-num" id="pg-away-score">—</div>
-        </div>
-        <div class="score-divider">@</div>
-        <div class="score-team">
-          <div class="score-team-name" id="pg-home-team">Home</div>
-          <div class="score-num" id="pg-home-score">—</div>
-        </div>
-      </div>
-
-      <!-- Results row -->
-      <div class="result-row">
-        <div class="result-chip">
-          <div class="who">AI</div>
-          <div class="icon" id="ai-result-icon">⏳</div>
-          <div class="desc" id="ai-result-desc">—</div>
-        </div>
-        <div class="result-chip">
-          <div class="who">You</div>
-          <div class="icon" id="reviewer-result-icon">⏳</div>
-          <div class="desc" id="reviewer-result-desc">—</div>
-        </div>
-      </div>
-
-      <!-- Beat AI banner -->
-      <div class="beat-ai-banner" id="beat-ai-banner">
-        <h3>🎉 You beat the AI!</h3>
-        <p>You saw something the model missed. Tell us what it was below.</p>
-      </div>
-
-      <!-- Postgame missing factors -->
-      <div class="form-group" style="margin-bottom:20px">
-        <label>What did you see that the AI missed?</label>
-        <div class="check-group" id="postgame-factors-group"></div>
-      </div>
-
-      <!-- Follow-up reason -->
-      <div class="form-group" style="margin-bottom:24px">
-        <label>Looking back, why were you right?</label>
-        <textarea id="postgame-reason" placeholder="Explain your edge over the model…"></textarea>
-      </div>
-
-      <div id="deep-analysis-fields" style="display:none">
-        <div class="form-group" style="margin-bottom:16px">
-          <label>What factor did the AI miss?</label>
-          <textarea id="structured-explanation" placeholder="Describe the missing factor and why it changed the game."></textarea>
-        </div>
-        <div class="form-group" style="margin-bottom:16px">
-          <label>Should this become a model feature?</label>
+      <div class="card">
+        <div class="form-group" style="margin-bottom:20px">
+          <label>Who wins?</label>
           <div class="radio-group">
             <div class="radio-btn">
-              <input type="radio" id="feature-yes" name="should-feature" value="yes" />
-              <label for="feature-yes">Yes</label>
+              <input type="radio" id="pick-home" name="who-wins" value="home" />
+              <label for="pick-home" id="who-home-label">🏠 Home</label>
             </div>
             <div class="radio-btn">
-              <input type="radio" id="feature-no" name="should-feature" value="no" />
-              <label for="feature-no">No</label>
+              <input type="radio" id="pick-away" name="who-wins" value="away" />
+              <label for="pick-away" id="who-away-label">✈️ Away</label>
             </div>
           </div>
         </div>
-        <div class="form-group" style="margin-bottom:16px">
-          <label>Importance (1-5)</label>
-          <input id="factor-importance" type="number" min="1" max="5" />
+
+        <div class="form-group" style="margin-bottom:20px">
+          <label>Your confidence</label>
+          <div class="stars-group">
+            <button type="button" class="star-btn dim" data-val="1">★</button>
+            <button type="button" class="star-btn dim" data-val="2">★</button>
+            <button type="button" class="star-btn dim" data-val="3">★</button>
+            <button type="button" class="star-btn dim" data-val="4">★</button>
+            <button type="button" class="star-btn dim" data-val="5">★</button>
+          </div>
+          <input type="hidden" id="reviewer-confidence" value="" />
         </div>
-        <div class="form-group" style="margin-bottom:16px">
-          <label>Factor tags (comma separated)</label>
-          <input id="factor-tags" type="text" placeholder="injury, pace, matchup" />
+
+        <div class="form-group" style="margin-bottom:20px">
+          <label>Would you bet?</label>
+          <div class="bet-group">
+            <div class="radio-btn">
+              <input type="radio" id="bet-no"     name="bet-size" value="no"     />
+              <label for="bet-no">No</label>
+            </div>
+            <div class="radio-btn">
+              <input type="radio" id="bet-small"  name="bet-size" value="small"  />
+              <label for="bet-small">Small bet</label>
+            </div>
+            <div class="radio-btn">
+              <input type="radio" id="bet-medium" name="bet-size" value="medium" />
+              <label for="bet-medium">Medium bet</label>
+            </div>
+            <div class="radio-btn">
+              <input type="radio" id="bet-large"  name="bet-size" value="large"  />
+              <label for="bet-large">Large bet</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group" id="primary-variable-group" style="display:none;margin-bottom:20px">
+          <label>Which variable influenced your decision most?</label>
+          <select id="primary-decision-variable">
+            <option value="">Select a variable…</option>
+            <option value="starting_pitcher">Starting pitcher</option>
+            <option value="bullpen">Bullpen</option>
+            <option value="lineup">Lineup</option>
+            <option value="injuries">Injuries</option>
+            <option value="weather">Weather</option>
+            <option value="home_field">Home field</option>
+            <option value="recent_form">Recent form</option>
+            <option value="travel">Travel</option>
+            <option value="coaching">Coaching</option>
+            <option value="other">Other</option>
+          </select>
+          <label style="margin-top:10px">Explain why this variable mattered</label>
+          <textarea id="disagree-explain" placeholder="Your reasoning becomes training data…"></textarea>
+        </div>
+
+        <div class="form-group" style="margin-bottom:20px">
+          <label>What might the model be missing?</label>
+          <div class="check-group" id="missing-factors-group"></div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:24px">
+          <label>Scouting notes</label>
+          <textarea id="pregame-notes" placeholder="What are you seeing that the AI might be missing?"></textarea>
+        </div>
+
+        <button class="btn btn-primary" id="pregame-submit-btn" style="width:100%">
+          Submit Pregame Review
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Postgame Reflection ──────────────────────────────── -->
+    <div id="postgame-section">
+      <p class="section-title">Postgame Reflection</p>
+
+      <input type="hidden" id="postgame-review-id" value="" />
+
+      <div class="card">
+        <div class="score-display">
+          <div class="score-team">
+            <div class="score-team-name" id="pg-away-team">Away</div>
+            <div class="score-num" id="pg-away-score">—</div>
+          </div>
+          <div class="score-divider">@</div>
+          <div class="score-team">
+            <div class="score-team-name" id="pg-home-team">Home</div>
+            <div class="score-num" id="pg-home-score">—</div>
+          </div>
+        </div>
+
+        <div class="result-row">
+          <div class="result-chip">
+            <div class="who">AI</div>
+            <div class="icon" id="ai-result-icon">⏳</div>
+            <div class="desc" id="ai-result-desc">—</div>
+          </div>
+          <div class="result-chip">
+            <div class="who">You</div>
+            <div class="icon" id="reviewer-result-icon">⏳</div>
+            <div class="desc" id="reviewer-result-desc">—</div>
+          </div>
+        </div>
+
+        <div class="beat-ai-banner" id="beat-ai-banner">
+          <h3>You found a case where the model was wrong</h3>
+          <p>Help teach it why. Your explanation becomes training data.</p>
+        </div>
+
+        <div class="form-group" style="margin-bottom:20px">
+          <label>What did you see that the AI missed?</label>
+          <div class="check-group" id="postgame-factors-group"></div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:24px">
+          <label>Looking back, why were you right?</label>
+          <textarea id="postgame-reason" placeholder="Explain your edge over the model…"></textarea>
+        </div>
+
+        <div id="deep-analysis-fields" style="display:none">
+          <div class="form-group" style="margin-bottom:16px">
+            <label>What factor did the AI miss?</label>
+            <textarea id="structured-explanation" placeholder="Describe the missing factor and why it changed the game."></textarea>
+          </div>
+          <div class="form-group" style="margin-bottom:16px">
+            <label>Should this become a model feature?</label>
+            <div class="radio-group">
+              <div class="radio-btn">
+                <input type="radio" id="feature-yes" name="should-feature" value="yes" />
+                <label for="feature-yes">Yes</label>
+              </div>
+              <div class="radio-btn">
+                <input type="radio" id="feature-no" name="should-feature" value="no" />
+                <label for="feature-no">No</label>
+              </div>
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:16px">
+            <label>Importance (1-5)</label>
+            <input id="factor-importance" type="number" min="1" max="5" />
+          </div>
+          <div class="form-group" style="margin-bottom:16px">
+            <label>Factor tags (comma separated)</label>
+            <input id="factor-tags" type="text" placeholder="injury, pace, matchup" />
+          </div>
+        </div>
+
+        <button class="btn btn-success" id="postgame-submit-btn" style="width:100%">
+          Submit Postgame Reflection
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Case Study (beat AI) ───────────────────────────── -->
+    <div id="case-study-section" style="display:none">
+      <p class="section-title">Case Study Required</p>
+      <div class="card">
+        <p style="color:var(--text-dim);font-size:.9rem;margin-bottom:16px">
+          You found a case where the model was wrong. Help teach it why — this becomes structured training data.
+        </p>
+        <input type="hidden" id="case-study-review-id" value="" />
+        <div class="form-group"><label>What did the AI miss?</label><textarea id="cs-ai-missed"></textarea></div>
+        <div class="form-group"><label>What influenced your decision?</label><textarea id="cs-decision-factors"></textarea></div>
+        <div class="form-group"><label>What variables should the model consider?</label><textarea id="cs-missing-variables"></textarea></div>
+        <div class="form-group"><label>Where could we find this data?</label><textarea id="cs-data-sources"></textarea></div>
+        <div class="form-group"><label>Confidence (1-5)</label><input type="number" id="cs-confidence" min="1" max="5" value="4" /></div>
+        <button class="btn btn-primary" id="case-study-submit-btn" style="width:100%">Submit Case Study</button>
+        <div id="case-study-comments" class="comment-thread" style="margin-top:16px"></div>
+        <div class="comment-compose" style="margin-top:12px">
+          <textarea id="case-study-comment-input" rows="2" placeholder="Discuss this case study…"></textarea>
+          <button class="btn btn-secondary" id="case-study-comment-btn" style="margin-top:8px">Post Comment</button>
         </div>
       </div>
-
-      <button class="btn btn-success" id="postgame-submit-btn" style="width:100%">
-        Submit Postgame Reflection
-      </button>
     </div>
-  </div>
+
+  </div><!-- /dashboard-main -->
 
 </div><!-- /page-wrap -->
 
-<!-- Toast -->
+<!-- Onboarding modal -->
+<div id="onboarding-modal" class="onboarding-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="onboarding-card">
+    <h2>Welcome, Analyst</h2>
+    <p class="onboarding-mission">
+      You are helping <strong>train the AI</strong>, not beta-testing it.
+      The model is expected to be wrong sometimes.
+      Your job is not only to judge correctness — <strong>your reasoning is the valuable data</strong>.
+    </p>
+    <div id="onboarding-questions"></div>
+    <div class="onboarding-actions">
+      <button class="btn btn-primary" id="onboarding-submit-btn">Save &amp; Continue</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
 <script src="/feedback/script.js"></script>
 </body>
 </html>

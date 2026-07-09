@@ -398,6 +398,158 @@ DEFAULT_REVIEWER_ID = "quintin"
 DEFAULT_REVIEWER_NAME = "Quintin"
 DEFAULT_REVIEWER_EMAIL = "quintinlf7@gmail.com"
 
+REVIEWER_PROFILE_COLUMNS = [
+    ("first_name", "TEXT"),
+    ("last_name", "TEXT"),
+    ("bio", "TEXT"),
+    ("analyst_role", "TEXT DEFAULT 'analyst'"),
+    ("profile_public", "BOOLEAN DEFAULT 0"),
+    ("onboarding_completed_at", "TIMESTAMP"),
+]
+
+TRUSTED_ANALYSTS = [
+    {
+        "reviewer_id": "lamar",
+        "name": "Lamar",
+        "first_name": "Lamar",
+        "last_name": "",
+        "bio": "Trusted sports logic analyst helping train prediction models.",
+        "analyst_role": "trusted_analyst",
+        "profile_public": True,
+    },
+    {
+        "reviewer_id": "melissa",
+        "name": "Melissa",
+        "first_name": "Melissa",
+        "last_name": "",
+        "bio": "Trusted analyst focused on identifying what the model misses.",
+        "analyst_role": "trusted_analyst",
+        "profile_public": True,
+    },
+    {
+        "reviewer_id": "alex",
+        "name": "Alex",
+        "first_name": "Alex",
+        "last_name": "",
+        "bio": "Trusted betting logic analyst contributing structured reasoning.",
+        "analyst_role": "trusted_analyst",
+        "profile_public": True,
+    },
+]
+
+
+def _split_display_name(name: str) -> tuple[str, str]:
+    parts = (name or "").strip().split(None, 1)
+    if not parts:
+        return "", ""
+    if len(parts) == 1:
+        return parts[0], ""
+    return parts[0], parts[1]
+
+
+def _ensure_reviewer_profile_columns(conn, engine: Engine) -> set[str]:
+    cols = {c["name"] for c in inspect(engine).get_columns("reviewers")}
+    for col_name, ddl in REVIEWER_PROFILE_COLUMNS:
+        if col_name not in cols:
+            conn.execute(text(f"ALTER TABLE reviewers ADD COLUMN {col_name} {ddl}"))
+            cols.add(col_name)
+    return cols
+
+
+def _backfill_reviewer_names(conn) -> None:
+    rows = conn.execute(
+        text(
+            """
+            SELECT reviewer_id, name, first_name
+            FROM reviewers
+            WHERE first_name IS NULL OR first_name = ''
+            """
+        )
+    ).mappings().all()
+    for row in rows:
+        first, last = _split_display_name(row["name"] or "")
+        conn.execute(
+            text(
+                """
+                UPDATE reviewers
+                SET first_name = :first_name,
+                    last_name = :last_name
+                WHERE reviewer_id = :rid
+                """
+            ),
+            {"first_name": first, "last_name": last, "rid": row["reviewer_id"]},
+        )
+
+
+def _seed_trusted_analysts(conn, engine: Engine, ts: str) -> None:
+    for analyst in TRUSTED_ANALYSTS:
+        existing = conn.execute(
+            text("SELECT reviewer_id FROM reviewers WHERE reviewer_id = :rid"),
+            {"rid": analyst["reviewer_id"]},
+        ).first()
+        if existing:
+            conn.execute(
+                text(
+                    """
+                    UPDATE reviewers
+                    SET name = :name,
+                        first_name = :first_name,
+                        last_name = :last_name,
+                        bio = :bio,
+                        analyst_role = :analyst_role,
+                        profile_public = :profile_public
+                    WHERE reviewer_id = :rid
+                    """
+                ),
+                {
+                    "rid": analyst["reviewer_id"],
+                    "name": analyst["name"],
+                    "first_name": analyst["first_name"],
+                    "last_name": analyst["last_name"],
+                    "bio": analyst["bio"],
+                    "analyst_role": analyst["analyst_role"],
+                    "profile_public": analyst["profile_public"],
+                },
+            )
+        else:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO reviewers
+                        (reviewer_id, name, email, first_name, last_name, bio,
+                         analyst_role, profile_public, created_at)
+                    VALUES
+                        (:rid, :name, NULL, :first_name, :last_name, :bio,
+                         :analyst_role, :profile_public, :ts)
+                    """
+                ),
+                {
+                    "rid": analyst["reviewer_id"],
+                    "name": analyst["name"],
+                    "first_name": analyst["first_name"],
+                    "last_name": analyst["last_name"],
+                    "bio": analyst["bio"],
+                    "analyst_role": analyst["analyst_role"],
+                    "profile_public": analyst["profile_public"],
+                    "ts": ts,
+                },
+            )
+
+        if _table_exists(engine, "reviewer_preferences"):
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO reviewer_preferences
+                        (reviewer_id, favorite_sports, emails_enabled, wants_betting_section,
+                         wants_explanations, wants_postgame_reviews, email_frequency, updated_at)
+                    VALUES
+                        (:rid, :sports, 1, 1, 1, 1, 'weekly', :ts)
+                    ON CONFLICT(reviewer_id) DO NOTHING
+                    """
+                ),
+                {"rid": analyst["reviewer_id"], "sports": json.dumps(["MLB", "NBA"]), "ts": ts},
+            )
+
 
 def ensure_default_reviewers(engine: Engine) -> None:
     """Seed beta reviewer rows for automation paths that skip API startup."""
@@ -410,7 +562,7 @@ def ensure_default_reviewers(engine: Engine) -> None:
 
     ts = datetime.utcnow().isoformat()
     with engine.begin() as conn:
-        cols = {c["name"] for c in inspect(engine).get_columns("reviewers")}
+        cols = _ensure_reviewer_profile_columns(conn, engine)
         if "email" not in cols:
             conn.execute(text("ALTER TABLE reviewers ADD COLUMN email TEXT"))
 
@@ -440,17 +592,21 @@ def ensure_default_reviewers(engine: Engine) -> None:
             )
             reviewer_id = existing[0]
         else:
+            first, last = _split_display_name(DEFAULT_REVIEWER_NAME)
             conn.execute(
                 text(
                     """
-                    INSERT INTO reviewers (reviewer_id, name, email, created_at)
-                    VALUES (:rid, :name, :email, :ts)
+                    INSERT INTO reviewers
+                        (reviewer_id, name, email, first_name, last_name, analyst_role, profile_public, created_at)
+                    VALUES (:rid, :name, :email, :first_name, :last_name, 'analyst', 0, :ts)
                     """
                 ),
                 {
                     "rid": DEFAULT_REVIEWER_ID,
                     "name": DEFAULT_REVIEWER_NAME,
                     "email": DEFAULT_REVIEWER_EMAIL,
+                    "first_name": first,
+                    "last_name": last,
                     "ts": ts,
                 },
             )
@@ -479,6 +635,9 @@ def ensure_default_reviewers(engine: Engine) -> None:
                     "ts": ts,
                 },
             )
+
+        _backfill_reviewer_names(conn)
+        _seed_trusted_analysts(conn, engine, ts)
 
     logger.info("Default reviewer seed ensured (reviewer_id=%s)", reviewer_id)
 

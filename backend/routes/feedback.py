@@ -6,11 +6,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import uuid
 from datetime import datetime, date, timedelta
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import inspect as sa_inspect, text
@@ -23,6 +24,10 @@ from backend.models import (
     ReviewOutcome,
     ReviewerPreference,
     ReviewerCustomSection,
+    AnalystQuestion,
+    AnalystAnswer,
+    AnalystCaseStudy,
+    AnalystComment,
 )
 from scripts.db_utils import (
     ensure_default_reviewers,
@@ -30,6 +35,9 @@ from scripts.db_utils import (
     insert_prediction,
     sql_bool_true,
     sql_case_bool_true,
+    _split_display_name,
+    _ensure_reviewer_profile_columns,
+    _backfill_reviewer_names,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,6 +69,71 @@ MISSING_FACTORS: Dict[str, List[str]] = {
 POSTGAME_FACTORS = [
     "Injuries", "Matchups", "Coaching", "Momentum",
     "Betting market", "Team chemistry", "Other",
+]
+
+PRIMARY_DECISION_VARIABLES = [
+    "starting_pitcher", "bullpen", "lineup", "injuries", "weather",
+    "home_field", "recent_form", "travel", "coaching", "other",
+]
+
+ONBOARDING_QUESTIONS: List[Dict[str, Any]] = [
+    {
+        "question_id": "onboard-eval-games",
+        "title": "How you evaluate games",
+        "body_markdown": "This helps the platform understand your analyst style.",
+        "prompts_json": json.dumps(["How do you normally evaluate games?"]),
+        "knowledge_area": "Analyst Profile",
+        "sort_order": 1,
+    },
+    {
+        "question_id": "onboard-trust-stats",
+        "title": "Statistics you trust",
+        "body_markdown": "Tell us which metrics you rely on when challenging the model.",
+        "prompts_json": json.dumps(["What statistics do you trust?"]),
+        "knowledge_area": "Statistics",
+        "sort_order": 2,
+    },
+    {
+        "question_id": "onboard-sports",
+        "title": "Sports expertise",
+        "body_markdown": "Your sport focus helps route the right predictions to you.",
+        "prompts_json": json.dumps(["What sports do you know best?"]),
+        "knowledge_area": "Analyst Profile",
+        "sort_order": 3,
+    },
+    {
+        "question_id": "onboard-risk",
+        "title": "Risk tolerance",
+        "body_markdown": "Understanding your risk profile improves training data quality.",
+        "prompts_json": json.dumps(["How much risk do you typically take?"]),
+        "knowledge_area": "Analyst Profile",
+        "sort_order": 4,
+    },
+]
+
+RESEARCH_SEED_QUESTIONS: List[Dict[str, Any]] = [
+    {
+        "question_id": "research-nash-equilibrium",
+        "title": "Can Nash equilibrium improve sports prediction?",
+        "body_markdown": (
+            "The equilibrium condition is:\n\n"
+            "$$u_i(s_i^*, s_{-i}^*) \\ge u_i(s_i, s_{-i})$$\n\n"
+            "**Variables:**\n"
+            "- $u_i$: payoff\n"
+            "- $s_i$: strategy\n"
+            "- $s_{-i}$: opponents' strategies\n\n"
+            "Think about how game theory could improve prediction models."
+        ),
+        "prompts_json": json.dumps([
+            "How would you model this in baseball?",
+            "Which variables already exist in our data?",
+            "Which variables are missing?",
+            "Where could we collect them?",
+        ]),
+        "knowledge_area": "Game Theory",
+        "sort_order": 1,
+        "featured": True,
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -349,6 +422,118 @@ def _ensure_seed_predictions(db_engine) -> None:
             insert_prediction(db_engine, row)
 
 
+def _welcome_name(row: Dict[str, Any]) -> str:
+    first = (row.get("first_name") or "").strip()
+    last = (row.get("last_name") or "").strip()
+    if first and last:
+        return f"{first} {last}"
+    if first:
+        return first
+    return (row.get("name") or "").strip()
+
+
+def _profile_from_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "reviewer_id": row["reviewer_id"],
+        "name": row["name"],
+        "first_name": row.get("first_name") or "",
+        "last_name": row.get("last_name") or "",
+        "display_name": _welcome_name(row),
+        "bio": row.get("bio"),
+        "analyst_role": row.get("analyst_role") or "analyst",
+        "profile_public": bool(row.get("profile_public")),
+        "onboarding_completed_at": row.get("onboarding_completed_at"),
+    }
+
+
+def _question_row_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
+    d = dict(row)
+    try:
+        d["prompts"] = json.loads(d.pop("prompts_json", None) or "[]")
+    except json.JSONDecodeError:
+        d["prompts"] = []
+    return d
+
+
+def _require_admin(x_admin_key: Optional[str]) -> None:
+    expected = os.getenv("ADMIN_API_KEY", "").strip()
+    if not expected or (x_admin_key or "").strip() != expected:
+        raise HTTPException(status_code=403, detail="Admin API key required")
+
+
+def _migrate_platform_columns(db_engine) -> None:
+    with db_engine.begin() as conn:
+        q_cols = {c["name"] for c in sa_inspect(db_engine).get_columns("analyst_questions")}
+        for col_name, ddl in [
+            ("knowledge_area", "TEXT"),
+            ("featured", "BOOLEAN DEFAULT 0"),
+        ]:
+            if col_name not in q_cols:
+                conn.execute(text(f"ALTER TABLE analyst_questions ADD COLUMN {col_name} {ddl}"))
+
+        a_cols = {c["name"] for c in sa_inspect(db_engine).get_columns("analyst_answers")}
+        if "knowledge_area" not in a_cols:
+            conn.execute(text("ALTER TABLE analyst_answers ADD COLUMN knowledge_area TEXT"))
+
+        pr_cols = {c["name"] for c in sa_inspect(db_engine).get_columns("prediction_reviews")}
+        if "primary_decision_variable" not in pr_cols:
+            conn.execute(text("ALTER TABLE prediction_reviews ADD COLUMN primary_decision_variable TEXT"))
+
+        pref_cols = {c["name"] for c in sa_inspect(db_engine).get_columns("reviewer_preferences")}
+        if "email_days" not in pref_cols:
+            conn.execute(text("ALTER TABLE reviewer_preferences ADD COLUMN email_days TEXT"))
+
+
+def _upsert_question(conn, question: Dict[str, Any], context: str, ts: str) -> None:
+    conn.execute(
+        text(
+            """
+            INSERT INTO analyst_questions
+                (question_id, context, title, body_markdown, prompts_json,
+                 knowledge_area, sort_order, active, featured, created_at)
+            VALUES
+                (:qid, :ctx, :title, :body, :prompts, :area, :sort_order, 1, :featured, :ts)
+            ON CONFLICT(question_id) DO UPDATE SET
+                title = excluded.title,
+                body_markdown = excluded.body_markdown,
+                prompts_json = excluded.prompts_json,
+                knowledge_area = excluded.knowledge_area,
+                sort_order = excluded.sort_order
+            """
+        ),
+        {
+            "qid": question["question_id"],
+            "ctx": context,
+            "title": question["title"],
+            "body": question["body_markdown"],
+            "prompts": question["prompts_json"],
+            "area": question.get("knowledge_area"),
+            "sort_order": question.get("sort_order", 0),
+            "featured": 1 if question.get("featured") else 0,
+            "ts": ts,
+        },
+    )
+
+
+def _seed_onboarding_questions(db_engine) -> None:
+    ts = datetime.utcnow().isoformat()
+    with db_engine.begin() as conn:
+        for question in ONBOARDING_QUESTIONS:
+            _upsert_question(conn, question, "onboarding", ts)
+
+
+def _seed_research_questions(db_engine) -> None:
+    with db_engine.begin() as conn:
+        count = conn.execute(
+            text("SELECT COUNT(*) FROM analyst_questions WHERE context = 'research'")
+        ).scalar() or 0
+        if count > 0:
+            return
+        ts = datetime.utcnow().isoformat()
+        for question in RESEARCH_SEED_QUESTIONS:
+            _upsert_question(conn, question, "research", ts)
+
+
 def init_platform(db_engine) -> None:
     """Initialize platform: create tables, run migrations, seed demo data if empty.
 
@@ -359,7 +544,15 @@ def init_platform(db_engine) -> None:
     
     Base.metadata.create_all(bind=db_engine)
     ensure_unified_schema(db_engine)
+
+    with db_engine.begin() as conn:
+        _ensure_reviewer_profile_columns(conn, db_engine)
+        _backfill_reviewer_names(conn)
+
     ensure_default_reviewers(db_engine)
+    _migrate_platform_columns(db_engine)
+    _seed_onboarding_questions(db_engine)
+    _seed_research_questions(db_engine)
 
     with db_engine.begin() as conn:
         outcome_cols = [c["name"] for c in sa_inspect(db_engine).get_columns("review_outcomes")]
@@ -406,6 +599,45 @@ class PregameReviewRequest(BaseModel):
     agree_with_model: bool = Field(default=True)
     missing_factors: List[str] = Field(default_factory=list)
     pregame_notes: Optional[str] = None
+    primary_decision_variable: Optional[str] = None
+
+
+class CaseStudyRequest(BaseModel):
+    review_id: str
+    reviewer_id: str
+    ai_missed: str = Field(..., min_length=1)
+    decision_factors: str = Field(..., min_length=1)
+    missing_variables: str = Field(..., min_length=1)
+    data_sources: str = Field(..., min_length=1)
+    confidence_rating: int = Field(..., ge=1, le=5)
+
+
+class ResearchAnswerItem(BaseModel):
+    question_id: str
+    answer: str = Field(..., min_length=1)
+    knowledge_area: Optional[str] = None
+
+
+class ResearchAnswersRequest(BaseModel):
+    reviewer_id: str
+    answers: List[ResearchAnswerItem] = Field(..., min_length=1)
+
+
+class AdminQuestionRequest(BaseModel):
+    question_id: Optional[str] = None
+    title: str = Field(..., min_length=1, max_length=200)
+    body_markdown: str = Field(..., min_length=1)
+    prompts: List[str] = Field(default_factory=list)
+    knowledge_area: Optional[str] = None
+    featured: bool = False
+    active: bool = True
+
+
+class CommentRequest(BaseModel):
+    reviewer_id: str
+    target_type: str = Field(..., pattern="^(case_study|research_question)$")
+    target_id: str
+    body: str = Field(..., min_length=1)
 
 
 class PostgameOutcomeRequest(BaseModel):
@@ -431,6 +663,16 @@ class CustomSectionRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=120)
     content: str = Field(..., min_length=1, max_length=1000)
     active: bool = True
+
+
+class OnboardingAnswerItem(BaseModel):
+    question_id: str = Field(..., min_length=1, max_length=64)
+    answer: str = Field(..., min_length=1)
+
+
+class OnboardingAnswersRequest(BaseModel):
+    reviewer_id: str = Field(..., min_length=1, max_length=100)
+    answers: List[OnboardingAnswerItem] = Field(..., min_length=1)
 
 
 # ---------------------------------------------------------------------------
@@ -608,7 +850,8 @@ def _resolve_reviewer(session, reviewer_ref: str) -> Optional[Dict[str, str]]:
     row = session.execute(
         text(
             """
-            SELECT reviewer_id, name
+            SELECT reviewer_id, name, first_name, last_name, bio, analyst_role,
+                   profile_public, onboarding_completed_at
             FROM reviewers
             WHERE reviewer_id = :ref
                OR lower(name) = lower(:ref)
@@ -620,7 +863,7 @@ def _resolve_reviewer(session, reviewer_ref: str) -> Optional[Dict[str, str]]:
     ).mappings().first()
     if not row:
         return None
-    return {"reviewer_id": row["reviewer_id"], "name": row["name"]}
+    return _profile_from_row(dict(row))
 
 
 def _load_reviewer_preferences(session, reviewer_id: str) -> Dict[str, Any]:
@@ -848,6 +1091,10 @@ def get_prediction(prediction_id: int) -> Dict[str, Any]:
     d["confidence_pct"] = _confidence_pct(snap, d.get("confidence_level") or "LOW")
     d["explanations"] = _explanations(snap)
     d["metrics"] = snap.get("metrics", {}) if isinstance(snap, dict) else {}
+    d["starting_pitchers"] = snap.get("starting_pitchers") if isinstance(snap, dict) else None
+    d["bullpen"] = snap.get("bullpen") if isinstance(snap, dict) else None
+    d["lineups"] = snap.get("lineups") if isinstance(snap, dict) else None
+    d["missing_data_warnings"] = snap.get("missing_data_warnings", []) if isinstance(snap, dict) else []
     d["data_source"] = snap.get("data_source") if isinstance(snap, dict) else None
     d["is_fallback"] = bool(snap.get("is_fallback")) if isinstance(snap, dict) else False
     d["offseason_notice"] = (d["metrics"] or {}).get("offseason_notice")
@@ -872,26 +1119,32 @@ def get_or_create_reviewer(payload: ReviewerRequest) -> Dict[str, Any]:
 
     email = (payload.email or "").strip() or None
     custom_id = (payload.reviewer_id or "").strip() or None
+    first_name, last_name = _split_display_name(name)
+    ts = datetime.utcnow().isoformat()
 
     with get_db_session() as session:
         # If a custom reviewer_id is provided, upsert by that ID
         if custom_id:
             session.execute(
                 text("""
-                    INSERT INTO reviewers (reviewer_id, name, email, created_at)
-                    VALUES (:rid, :name, :email, :ts)
+                    INSERT INTO reviewers
+                        (reviewer_id, name, email, first_name, last_name, analyst_role, profile_public, created_at)
+                    VALUES (:rid, :name, :email, :first_name, :last_name, 'analyst', 0, :ts)
                     ON CONFLICT(reviewer_id) DO UPDATE SET
                         name  = excluded.name,
-                        email = COALESCE(excluded.email, reviewers.email)
+                        email = COALESCE(excluded.email, reviewers.email),
+                        first_name = COALESCE(reviewers.first_name, excluded.first_name),
+                        last_name = COALESCE(reviewers.last_name, excluded.last_name)
                 """),
-                {"rid": custom_id, "name": name, "email": email,
-                 "ts": datetime.utcnow().isoformat()},
+                {
+                    "rid": custom_id, "name": name, "email": email,
+                    "first_name": first_name, "last_name": last_name, "ts": ts,
+                },
             )
             session.commit()
             reviewer_id = custom_id
-            created = False  # upsert — may have been created or updated
+            created = False
         else:
-            # Classic get-or-create by name
             existing = session.execute(
                 text("SELECT reviewer_id FROM reviewers WHERE name = :n"),
                 {"n": name},
@@ -899,7 +1152,6 @@ def get_or_create_reviewer(payload: ReviewerRequest) -> Dict[str, Any]:
 
             if existing:
                 reviewer_id = existing["reviewer_id"]
-                # Update email if now provided and not yet stored
                 if email:
                     session.execute(
                         text("UPDATE reviewers SET email = :email "
@@ -911,14 +1163,22 @@ def get_or_create_reviewer(payload: ReviewerRequest) -> Dict[str, Any]:
             else:
                 reviewer_id = str(uuid.uuid4())
                 session.execute(
-                    text("INSERT INTO reviewers (reviewer_id, name, email, created_at) "
-                         "VALUES (:rid, :name, :email, :ts)"),
-                    {"rid": reviewer_id, "name": name, "email": email,
-                     "ts": datetime.utcnow().isoformat()},
+                    text(
+                        """
+                        INSERT INTO reviewers
+                            (reviewer_id, name, email, first_name, last_name, analyst_role, profile_public, created_at)
+                        VALUES (:rid, :name, :email, :first_name, :last_name, 'analyst', 0, :ts)
+                        """
+                    ),
+                    {
+                        "rid": reviewer_id, "name": name, "email": email,
+                        "first_name": first_name, "last_name": last_name, "ts": ts,
+                    },
                 )
                 session.commit()
                 created = True
 
+        profile = _resolve_reviewer(session, reviewer_id) or {}
         stats = _reviewer_stats(session, reviewer_id)
         history = _reviewer_history(session, reviewer_id)
         preferences = _load_reviewer_preferences(session, reviewer_id)
@@ -928,6 +1188,13 @@ def get_or_create_reviewer(payload: ReviewerRequest) -> Dict[str, Any]:
         "reviewer_id": reviewer_id,
         "name": name,
         "created": created,
+        "first_name": profile.get("first_name", first_name),
+        "last_name": profile.get("last_name", last_name),
+        "display_name": profile.get("display_name", name),
+        "bio": profile.get("bio"),
+        "analyst_role": profile.get("analyst_role", "analyst"),
+        "profile_public": profile.get("profile_public", False),
+        "onboarding_completed_at": profile.get("onboarding_completed_at"),
         "stats": stats,
         "history": history,
         "preferences": preferences,
@@ -943,7 +1210,7 @@ def reviewer_stats(reviewer_id: str) -> Dict[str, Any]:
             raise HTTPException(status_code=404, detail="Reviewer not found")
         rid = resolved["reviewer_id"]
         stats = _reviewer_stats(session, rid)
-    return {"reviewer_id": rid, "name": resolved["name"], **stats}
+    return {**resolved, **stats}
 
 
 @router.get("/reviewers/{reviewer_id}/history")
@@ -1086,11 +1353,11 @@ def submit_pregame_review(payload: PregameReviewRequest) -> Dict[str, Any]:
                 INSERT INTO prediction_reviews
                     (review_id, prediction_id, reviewer_id, reviewer_pick,
                      reviewer_confidence, would_bet, agree_with_model,
-                     missing_factors, pregame_notes, created_at)
+                     missing_factors, pregame_notes, primary_decision_variable, created_at)
                 VALUES
                     (:rid, :pid, :rvid, :pick,
                      :conf, :bet, :agree,
-                     :factors, :notes, :ts)
+                     :factors, :notes, :primary_var, :ts)
             """),
             {
                 "rid": review_id,
@@ -1102,6 +1369,7 @@ def submit_pregame_review(payload: PregameReviewRequest) -> Dict[str, Any]:
                 "agree": agree_with_model,
                 "factors": factors_json,
                 "notes": payload.pregame_notes,
+                "primary_var": payload.primary_decision_variable,
                 "ts": datetime.utcnow().isoformat(),
             },
         )
@@ -1251,3 +1519,601 @@ def pending_postgame(reviewer_id: Optional[str] = None) -> List[Dict[str, Any]]:
         d["matchup"] = f"{d['away_team']} @ {d['home_team']}"
         result.append(d)
     return result
+
+
+@router.get("/analysts")
+def list_public_analysts() -> List[Dict[str, Any]]:
+    eng = engine
+    public_true = sql_bool_true("profile_public", eng)
+    with get_db_session() as session:
+        rows = session.execute(
+            text(
+                f"""
+                SELECT reviewer_id, name, first_name, last_name, bio, analyst_role,
+                       profile_public, onboarding_completed_at
+                FROM reviewers
+                WHERE {public_true}
+                ORDER BY name ASC
+                """
+            )
+        ).mappings().all()
+    return [_profile_from_row(dict(r)) for r in rows]
+
+
+@router.get("/decision-variables")
+def list_decision_variables() -> Dict[str, Any]:
+    return {"variables": PRIMARY_DECISION_VARIABLES}
+
+
+@router.get("/analysts/{reviewer_id}/profile")
+def public_analyst_profile(reviewer_id: str) -> Dict[str, Any]:
+    with get_db_session() as session:
+        resolved = _resolve_reviewer(session, reviewer_id)
+        if not resolved:
+            raise HTTPException(status_code=404, detail="Analyst not found")
+        if not resolved.get("profile_public"):
+            raise HTTPException(status_code=404, detail="Profile is not public")
+        rid = resolved["reviewer_id"]
+        stats = _reviewer_stats(session, rid)
+        eng = session.get_bind()
+        published_true = sql_bool_true("cs.published", eng)
+        case_rows = session.execute(
+            text(
+                f"""
+                SELECT cs.case_id, cs.review_id, cs.prediction_id, cs.ai_missed,
+                       cs.decision_factors, cs.missing_variables, cs.data_sources,
+                       cs.confidence_rating, cs.created_at,
+                       p.home_team, p.away_team, p.game_date, p.sport
+                FROM analyst_case_studies cs
+                JOIN predictions p ON p.prediction_id = cs.prediction_id
+                WHERE cs.reviewer_id = :rid AND {published_true}
+                ORDER BY cs.created_at DESC
+                LIMIT 20
+                """
+            ),
+            {"rid": rid},
+        ).mappings().all()
+    public = {k: v for k, v in resolved.items() if k != "onboarding_completed_at"}
+    cases = []
+    for row in case_rows:
+        d = dict(row)
+        d["matchup"] = f"{d['away_team']} @ {d['home_team']}"
+        cases.append(d)
+    return {**public, "stats": stats, "case_studies": cases}
+
+
+@router.get("/onboarding/questions")
+def list_onboarding_questions() -> List[Dict[str, Any]]:
+    eng = engine
+    active_true = sql_bool_true("active", eng)
+    with get_db_session() as session:
+        rows = session.execute(
+            text(
+                f"""
+                SELECT question_id, context, title, body_markdown, prompts_json,
+                       knowledge_area, sort_order
+                FROM analyst_questions
+                WHERE context = 'onboarding' AND {active_true}
+                ORDER BY sort_order ASC, created_at ASC
+                """
+            )
+        ).mappings().all()
+    result = []
+    for row in rows:
+        result.append(_question_row_to_dict(dict(row)))
+    return result
+
+
+@router.get("/onboarding/status")
+def onboarding_status(reviewer_id: str) -> Dict[str, Any]:
+    eng = engine
+    active_true = sql_bool_true("active", eng)
+    with get_db_session() as session:
+        resolved = _resolve_reviewer(session, reviewer_id)
+        if not resolved:
+            raise HTTPException(status_code=404, detail="Reviewer not found")
+        rid = resolved["reviewer_id"]
+        if resolved.get("onboarding_completed_at"):
+            return {
+                "reviewer_id": rid,
+                "completed": True,
+                "unanswered_count": 0,
+                "total_questions": 0,
+            }
+        total = session.execute(
+            text(
+                f"""
+                SELECT COUNT(*) FROM analyst_questions
+                WHERE context = 'onboarding' AND {active_true}
+                """
+            )
+        ).scalar() or 0
+        answered = session.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM analyst_answers aa
+                JOIN analyst_questions aq ON aq.question_id = aa.question_id
+                WHERE aa.reviewer_id = :rid
+                  AND aq.context = 'onboarding'
+                """
+            ),
+            {"rid": rid},
+        ).scalar() or 0
+    return {
+        "reviewer_id": rid,
+        "completed": total > 0 and answered >= total,
+        "unanswered_count": max(0, total - answered),
+        "total_questions": total,
+    }
+
+
+@router.post("/onboarding/answers")
+def submit_onboarding_answers(payload: OnboardingAnswersRequest) -> Dict[str, Any]:
+    ts = datetime.utcnow().isoformat()
+    with get_db_session() as session:
+        resolved = _resolve_reviewer(session, payload.reviewer_id)
+        if not resolved:
+            raise HTTPException(status_code=404, detail="Reviewer not found")
+        rid = resolved["reviewer_id"]
+
+        for item in payload.answers:
+            question = session.execute(
+                text(
+                    """
+                    SELECT question_id, knowledge_area FROM analyst_questions
+                    WHERE question_id = :qid AND context = 'onboarding'
+                    """
+                ),
+                {"qid": item.question_id},
+            ).mappings().first()
+            if not question:
+                raise HTTPException(status_code=404, detail=f"Question not found: {item.question_id}")
+
+            area = question["knowledge_area"]
+            existing = session.execute(
+                text(
+                    """
+                    SELECT answer_id FROM analyst_answers
+                    WHERE question_id = :qid AND reviewer_id = :rid
+                    """
+                ),
+                {"qid": item.question_id, "rid": rid},
+            ).first()
+            if existing:
+                session.execute(
+                    text(
+                        """
+                        UPDATE analyst_answers
+                        SET answer = :answer, knowledge_area = :area, created_at = :ts
+                        WHERE question_id = :qid AND reviewer_id = :rid
+                        """
+                    ),
+                    {"answer": item.answer.strip(), "area": area, "ts": ts, "qid": item.question_id, "rid": rid},
+                )
+            else:
+                session.execute(
+                    text(
+                        """
+                        INSERT INTO analyst_answers
+                            (answer_id, question_id, reviewer_id, answer, knowledge_area, created_at)
+                        VALUES (:aid, :qid, :rid, :answer, :area, :ts)
+                        """
+                    ),
+                    {
+                        "aid": str(uuid.uuid4()),
+                        "qid": item.question_id,
+                        "rid": rid,
+                        "answer": item.answer.strip(),
+                        "area": area,
+                        "ts": ts,
+                    },
+                )
+
+        active_true = sql_bool_true("active", session.get_bind())
+        total = session.execute(
+            text(
+                f"""
+                SELECT COUNT(*) FROM analyst_questions
+                WHERE context = 'onboarding' AND {active_true}
+                """
+            )
+        ).scalar() or 0
+        answered = session.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM analyst_answers aa
+                JOIN analyst_questions aq ON aq.question_id = aa.question_id
+                WHERE aa.reviewer_id = :rid AND aq.context = 'onboarding'
+                """
+            ),
+            {"rid": rid},
+        ).scalar() or 0
+
+        completed = total > 0 and answered >= total
+        if completed:
+            session.execute(
+                text(
+                    """
+                    UPDATE reviewers
+                    SET onboarding_completed_at = :ts
+                    WHERE reviewer_id = :rid
+                    """
+                ),
+                {"ts": ts, "rid": rid},
+            )
+        session.commit()
+
+    return {
+        "reviewer_id": rid,
+        "status": "saved",
+        "completed": completed,
+        "answered_count": answered,
+        "total_questions": total,
+    }
+
+
+@router.get("/research/current")
+def current_research_question(reviewer_id: Optional[str] = None) -> Dict[str, Any]:
+    eng = engine
+    active_true = sql_bool_true("active", eng)
+    featured_true = sql_bool_true("featured", eng)
+    with get_db_session() as session:
+        row = session.execute(
+            text(
+                f"""
+                SELECT question_id, title, body_markdown, prompts_json, knowledge_area, sort_order
+                FROM analyst_questions
+                WHERE context = 'research' AND {active_true} AND {featured_true}
+                ORDER BY sort_order ASC, created_at DESC
+                LIMIT 1
+                """
+            )
+        ).mappings().first()
+        if not row:
+            raise HTTPException(status_code=404, detail="No featured research question")
+        question = _question_row_to_dict(dict(row))
+        if reviewer_id:
+            ans = session.execute(
+                text(
+                    """
+                    SELECT answer, knowledge_area, created_at
+                    FROM analyst_answers
+                    WHERE question_id = :qid AND reviewer_id = :rid
+                    """
+                ),
+                {"qid": question["question_id"], "rid": reviewer_id},
+            ).mappings().first()
+            question["existing_answer"] = dict(ans) if ans else None
+    return question
+
+
+@router.get("/research/questions")
+def list_research_questions() -> List[Dict[str, Any]]:
+    eng = engine
+    active_true = sql_bool_true("active", eng)
+    with get_db_session() as session:
+        rows = session.execute(
+            text(
+                f"""
+                SELECT question_id, title, body_markdown, prompts_json, knowledge_area,
+                       sort_order, featured
+                FROM analyst_questions
+                WHERE context = 'research' AND {active_true}
+                ORDER BY featured DESC, sort_order ASC, created_at DESC
+                """
+            )
+        ).mappings().all()
+    return [_question_row_to_dict(dict(r)) for r in rows]
+
+
+@router.get("/research/answers")
+def list_research_answers(
+    knowledge_area: Optional[str] = None,
+    question_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    clauses = ["aq.context = 'research'"]
+    params: Dict[str, Any] = {}
+    if knowledge_area:
+        clauses.append("aa.knowledge_area = :area")
+        params["area"] = knowledge_area
+    if question_id:
+        clauses.append("aa.question_id = :qid")
+        params["qid"] = question_id
+    where = " AND ".join(clauses)
+    with get_db_session() as session:
+        rows = session.execute(
+            text(
+                f"""
+                SELECT aa.answer_id, aa.question_id, aa.reviewer_id, aa.answer,
+                       aa.knowledge_area, aa.created_at,
+                       aq.title AS question_title, r.name AS reviewer_name
+                FROM analyst_answers aa
+                JOIN analyst_questions aq ON aq.question_id = aa.question_id
+                JOIN reviewers r ON r.reviewer_id = aa.reviewer_id
+                WHERE {where}
+                ORDER BY aa.created_at DESC
+                LIMIT 100
+                """
+            ),
+            params,
+        ).mappings().all()
+    return [dict(r) for r in rows]
+
+
+@router.post("/research/answers")
+def submit_research_answers(payload: ResearchAnswersRequest) -> Dict[str, Any]:
+    ts = datetime.utcnow().isoformat()
+    saved = 0
+    with get_db_session() as session:
+        resolved = _resolve_reviewer(session, payload.reviewer_id)
+        if not resolved:
+            raise HTTPException(status_code=404, detail="Reviewer not found")
+        rid = resolved["reviewer_id"]
+        for item in payload.answers:
+            question = session.execute(
+                text(
+                    """
+                    SELECT question_id, knowledge_area FROM analyst_questions
+                    WHERE question_id = :qid AND context = 'research'
+                    """
+                ),
+                {"qid": item.question_id},
+            ).mappings().first()
+            if not question:
+                raise HTTPException(status_code=404, detail=f"Question not found: {item.question_id}")
+            area = item.knowledge_area or question["knowledge_area"]
+            existing = session.execute(
+                text(
+                    "SELECT answer_id FROM analyst_answers WHERE question_id = :qid AND reviewer_id = :rid"
+                ),
+                {"qid": item.question_id, "rid": rid},
+            ).first()
+            if existing:
+                session.execute(
+                    text(
+                        """
+                        UPDATE analyst_answers
+                        SET answer = :answer, knowledge_area = :area, created_at = :ts
+                        WHERE question_id = :qid AND reviewer_id = :rid
+                        """
+                    ),
+                    {"answer": item.answer.strip(), "area": area, "ts": ts, "qid": item.question_id, "rid": rid},
+                )
+            else:
+                session.execute(
+                    text(
+                        """
+                        INSERT INTO analyst_answers
+                            (answer_id, question_id, reviewer_id, answer, knowledge_area, created_at)
+                        VALUES (:aid, :qid, :rid, :answer, :area, :ts)
+                        """
+                    ),
+                    {
+                        "aid": str(uuid.uuid4()),
+                        "qid": item.question_id,
+                        "rid": rid,
+                        "answer": item.answer.strip(),
+                        "area": area,
+                        "ts": ts,
+                    },
+                )
+            saved += 1
+        session.commit()
+    return {"reviewer_id": rid, "status": "saved", "saved_count": saved}
+
+
+@router.post("/admin/questions")
+def admin_create_question(
+    payload: AdminQuestionRequest,
+    x_admin_key: Optional[str] = Header(None, alias="X-Admin-Key"),
+) -> Dict[str, Any]:
+    _require_admin(x_admin_key)
+    qid = (payload.question_id or "").strip() or f"research-{uuid.uuid4().hex[:12]}"
+    ts = datetime.utcnow().isoformat()
+    with get_db_session() as session:
+        if payload.featured:
+            session.execute(
+                text(
+                    """
+                    UPDATE analyst_questions
+                    SET featured = 0
+                    WHERE context = 'research'
+                    """
+                )
+            )
+        session.execute(
+            text(
+                """
+                INSERT INTO analyst_questions
+                    (question_id, context, title, body_markdown, prompts_json,
+                     knowledge_area, sort_order, active, featured, created_at)
+                VALUES
+                    (:qid, 'research', :title, :body, :prompts, :area, 0, :active, :featured, :ts)
+                ON CONFLICT(question_id) DO UPDATE SET
+                    title = excluded.title,
+                    body_markdown = excluded.body_markdown,
+                    prompts_json = excluded.prompts_json,
+                    knowledge_area = excluded.knowledge_area,
+                    active = excluded.active,
+                    featured = excluded.featured
+                """
+            ),
+            {
+                "qid": qid,
+                "title": payload.title,
+                "body": payload.body_markdown,
+                "prompts": json.dumps(payload.prompts),
+                "area": payload.knowledge_area,
+                "active": 1 if payload.active else 0,
+                "featured": 1 if payload.featured else 0,
+                "ts": ts,
+            },
+        )
+        session.commit()
+    return {"question_id": qid, "status": "saved"}
+
+
+@router.get("/case-studies/pending")
+def pending_case_studies(reviewer_id: str) -> List[Dict[str, Any]]:
+    eng = engine
+    beat_true = sql_bool_true("ro.reviewer_beat_model", eng)
+    with get_db_session() as session:
+        rows = session.execute(
+            text(
+                f"""
+                SELECT pr.review_id, pr.prediction_id, pr.reviewer_pick,
+                       p.home_team, p.away_team, p.game_date, p.sport,
+                       p.predicted_winner, p.actual_winner
+                FROM prediction_reviews pr
+                JOIN review_outcomes ro ON ro.review_id = pr.review_id
+                JOIN predictions p ON p.prediction_id = pr.prediction_id
+                LEFT JOIN analyst_case_studies cs ON cs.review_id = pr.review_id
+                WHERE pr.reviewer_id = :rid
+                  AND {beat_true}
+                  AND cs.case_id IS NULL
+                ORDER BY ro.resolved_at DESC
+                """
+            ),
+            {"rid": reviewer_id},
+        ).mappings().all()
+    result = []
+    for row in rows:
+        d = dict(row)
+        d["matchup"] = f"{d['away_team']} @ {d['home_team']}"
+        d["sport_ui"] = _ui_sport(d["sport"])
+        result.append(d)
+    return result
+
+
+@router.post("/case-studies")
+def submit_case_study(payload: CaseStudyRequest) -> Dict[str, Any]:
+    ts = datetime.utcnow().isoformat()
+    with get_db_session() as session:
+        review = session.execute(
+            text(
+                """
+                SELECT pr.review_id, pr.prediction_id, pr.reviewer_id
+                FROM prediction_reviews pr
+                JOIN review_outcomes ro ON ro.review_id = pr.review_id
+                WHERE pr.review_id = :rid AND pr.reviewer_id = :rvid
+                """
+            ),
+            {"rid": payload.review_id, "rvid": payload.reviewer_id},
+        ).mappings().first()
+        if not review:
+            raise HTTPException(status_code=404, detail="Beat-AI review not found")
+        eng = session.get_bind()
+        beat_true = sql_bool_true("reviewer_beat_model", eng)
+        beat = session.execute(
+            text(f"SELECT reviewer_beat_model FROM review_outcomes WHERE review_id = :rid AND {beat_true}"),
+            {"rid": payload.review_id},
+        ).mappings().first()
+        if not beat:
+            raise HTTPException(status_code=400, detail="Case study only required when analyst beat the model")
+
+        existing = session.execute(
+            text("SELECT case_id FROM analyst_case_studies WHERE review_id = :rid"),
+            {"rid": payload.review_id},
+        ).mappings().first()
+        case_id = str(uuid.uuid4())
+        if existing:
+            session.execute(
+                text(
+                    """
+                    UPDATE analyst_case_studies
+                    SET ai_missed = :ai_missed, decision_factors = :decision_factors,
+                        missing_variables = :missing_variables, data_sources = :data_sources,
+                        confidence_rating = :confidence_rating, created_at = :ts
+                    WHERE review_id = :rid
+                    """
+                ),
+                {
+                    "ai_missed": payload.ai_missed,
+                    "decision_factors": payload.decision_factors,
+                    "missing_variables": payload.missing_variables,
+                    "data_sources": payload.data_sources,
+                    "confidence_rating": payload.confidence_rating,
+                    "ts": ts,
+                    "rid": payload.review_id,
+                },
+            )
+            case_id = existing["case_id"]
+        else:
+            session.execute(
+                text(
+                    """
+                    INSERT INTO analyst_case_studies
+                        (case_id, review_id, reviewer_id, prediction_id,
+                         ai_missed, decision_factors, missing_variables, data_sources,
+                         confidence_rating, published, created_at)
+                    VALUES
+                        (:cid, :rid, :rvid, :pid, :ai_missed, :decision_factors,
+                         :missing_variables, :data_sources, :conf, 1, :ts)
+                    """
+                ),
+                {
+                    "cid": case_id,
+                    "rid": payload.review_id,
+                    "rvid": payload.reviewer_id,
+                    "pid": review["prediction_id"],
+                    "ai_missed": payload.ai_missed,
+                    "decision_factors": payload.decision_factors,
+                    "missing_variables": payload.missing_variables,
+                    "data_sources": payload.data_sources,
+                    "conf": payload.confidence_rating,
+                    "ts": ts,
+                },
+            )
+        session.commit()
+    return {"case_id": case_id, "status": "saved"}
+
+
+@router.get("/comments")
+def list_comments(target_type: str, target_id: str) -> List[Dict[str, Any]]:
+    if target_type not in ("case_study", "research_question"):
+        raise HTTPException(status_code=400, detail="Invalid target_type")
+    with get_db_session() as session:
+        rows = session.execute(
+            text(
+                """
+                SELECT c.comment_id, c.reviewer_id, c.target_type, c.target_id,
+                       c.body, c.created_at, r.name, r.first_name, r.last_name
+                FROM analyst_comments c
+                JOIN reviewers r ON r.reviewer_id = c.reviewer_id
+                WHERE c.target_type = :tt AND c.target_id = :tid
+                ORDER BY c.created_at ASC
+                """
+            ),
+            {"tt": target_type, "tid": target_id},
+        ).mappings().all()
+    return [dict(r) for r in rows]
+
+
+@router.post("/comments")
+def post_comment(payload: CommentRequest) -> Dict[str, Any]:
+    with get_db_session() as session:
+        resolved = _resolve_reviewer(session, payload.reviewer_id)
+        if not resolved:
+            raise HTTPException(status_code=404, detail="Reviewer not found")
+        comment_id = str(uuid.uuid4())
+        session.execute(
+            text(
+                """
+                INSERT INTO analyst_comments
+                    (comment_id, reviewer_id, target_type, target_id, body, created_at)
+                VALUES (:cid, :rid, :tt, :tid, :body, :ts)
+                """
+            ),
+            {
+                "cid": comment_id,
+                "rid": resolved["reviewer_id"],
+                "tt": payload.target_type,
+                "tid": payload.target_id,
+                "body": payload.body.strip(),
+                "ts": datetime.utcnow().isoformat(),
+            },
+        )
+        session.commit()
+    return {"comment_id": comment_id, "status": "saved"}

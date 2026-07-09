@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from data.nba_predictions_service import OffSeasonStrategy
 from data.explanation_engine import build_snapshot
+from data.mlb_context import build_mlb_context
 
 logger = logging.getLogger(__name__)
 
@@ -56,28 +57,20 @@ class MLBLivePredictionService:
                 home_team = game.get("home_name", "Unknown")
                 away_team = game.get("away_name", "Unknown")
 
+                mlb_ctx = build_mlb_context(game)
                 confidence = 0.57
                 feature_snapshot = build_snapshot(
                     sport="MLB",
                     data_source="mlb_statsapi",
                     is_fallback=False,
                     confidence_score=confidence,
-                    explanations=[
-                        {"label": "ELO Difference", "weight": 0.24, "value": "+31"},
-                        {"label": "Starting Pitcher Strength", "weight": 0.22, "value": "3.64 ERA"},
-                        {"label": "Bullpen Strength", "weight": 0.18, "value": "Top 12"},
-                        {"label": "Run Differential", "weight": 0.18, "value": "+0.7"},
-                        {"label": "Recent Form", "weight": 0.18, "value": "6-4"},
-                    ],
-                    metrics={
-                        "elo_difference": 31,
-                        "starting_pitcher_strength": 3.64,
-                        "bullpen_strength": 12,
-                        "run_differential": 0.7,
-                        "recent_form": "6-4",
-                        "home_field_advantage": "moderate",
-                    },
+                    explanations=mlb_ctx.get("explanations", []),
+                    metrics={k: v for k, v in mlb_ctx.get("metrics", {}).items() if v is not None},
                 )
+                feature_snapshot["starting_pitchers"] = mlb_ctx.get("starting_pitchers", {})
+                feature_snapshot["bullpen"] = mlb_ctx.get("bullpen", {})
+                feature_snapshot["lineups"] = mlb_ctx.get("lineups", {})
+                feature_snapshot["missing_data_warnings"] = mlb_ctx.get("missing_data_warnings", [])
 
                 row = {
                     "sport": "MLB",
