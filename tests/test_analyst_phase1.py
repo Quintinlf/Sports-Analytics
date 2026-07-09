@@ -65,10 +65,10 @@ class TestAnalystPhase1(unittest.TestCase):
                 text(
                     """
                     INSERT INTO reviewers (reviewer_id, name, email, first_name, last_name, analyst_role, profile_public, created_at)
-                    VALUES ('test-user', 'Jane Doe', NULL, NULL, NULL, 'analyst', 0, :ts)
+                    VALUES ('test-user', 'Jane Doe', NULL, NULL, NULL, 'analyst', :profile_public, :ts)
                     """
                 ),
-                {"ts": ts},
+                {"ts": ts, "profile_public": False},
             )
             _backfill_reviewer_names(conn)
             row = conn.execute(
@@ -167,6 +167,33 @@ class TestAnalystPhase1(unittest.TestCase):
                 text("SELECT COUNT(*) FROM analyst_questions WHERE context = 'onboarding'")
             ).scalar()
         self.assertGreaterEqual(count, 4)
+
+    def test_trusted_analyst_preferences_seeded_as_booleans(self) -> None:
+        ensure_default_reviewers(self.engine)
+        with self.engine.connect() as conn:
+            prefs = conn.execute(
+                text(
+                    """
+                    SELECT emails_enabled, wants_betting_section, wants_explanations,
+                           wants_postgame_reviews
+                    FROM reviewer_preferences
+                    WHERE reviewer_id = 'lamar'
+                    """
+                )
+            ).mappings().first()
+            profile = conn.execute(
+                text("SELECT profile_public FROM reviewers WHERE reviewer_id = 'lamar'")
+            ).mappings().first()
+        self.assertIsNotNone(prefs)
+        self.assertIsNotNone(profile)
+        for col in (
+            "emails_enabled",
+            "wants_betting_section",
+            "wants_explanations",
+            "wants_postgame_reviews",
+        ):
+            self.assertTrue(bool(prefs[col]), msg=f"{col} should be truthy for trusted analyst")
+        self.assertTrue(bool(profile["profile_public"]))
 
     def test_research_featured_question(self) -> None:
         res = self.client.get("/api/feedback/research/current")

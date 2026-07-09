@@ -492,7 +492,7 @@ def _upsert_question(conn, question: Dict[str, Any], context: str, ts: str) -> N
                 (question_id, context, title, body_markdown, prompts_json,
                  knowledge_area, sort_order, active, featured, created_at)
             VALUES
-                (:qid, :ctx, :title, :body, :prompts, :area, :sort_order, 1, :featured, :ts)
+                (:qid, :ctx, :title, :body, :prompts, :area, :sort_order, :active, :featured, :ts)
             ON CONFLICT(question_id) DO UPDATE SET
                 title = excluded.title,
                 body_markdown = excluded.body_markdown,
@@ -509,7 +509,8 @@ def _upsert_question(conn, question: Dict[str, Any], context: str, ts: str) -> N
             "prompts": question["prompts_json"],
             "area": question.get("knowledge_area"),
             "sort_order": question.get("sort_order", 0),
-            "featured": 1 if question.get("featured") else 0,
+            "active": True,
+            "featured": bool(question.get("featured")),
             "ts": ts,
         },
     )
@@ -1129,7 +1130,7 @@ def get_or_create_reviewer(payload: ReviewerRequest) -> Dict[str, Any]:
                 text("""
                     INSERT INTO reviewers
                         (reviewer_id, name, email, first_name, last_name, analyst_role, profile_public, created_at)
-                    VALUES (:rid, :name, :email, :first_name, :last_name, 'analyst', 0, :ts)
+                    VALUES (:rid, :name, :email, :first_name, :last_name, 'analyst', :profile_public, :ts)
                     ON CONFLICT(reviewer_id) DO UPDATE SET
                         name  = excluded.name,
                         email = COALESCE(excluded.email, reviewers.email),
@@ -1138,7 +1139,8 @@ def get_or_create_reviewer(payload: ReviewerRequest) -> Dict[str, Any]:
                 """),
                 {
                     "rid": custom_id, "name": name, "email": email,
-                    "first_name": first_name, "last_name": last_name, "ts": ts,
+                    "first_name": first_name, "last_name": last_name,
+                    "profile_public": False, "ts": ts,
                 },
             )
             session.commit()
@@ -1167,12 +1169,13 @@ def get_or_create_reviewer(payload: ReviewerRequest) -> Dict[str, Any]:
                         """
                         INSERT INTO reviewers
                             (reviewer_id, name, email, first_name, last_name, analyst_role, profile_public, created_at)
-                        VALUES (:rid, :name, :email, :first_name, :last_name, 'analyst', 0, :ts)
+                        VALUES (:rid, :name, :email, :first_name, :last_name, 'analyst', :profile_public, :ts)
                         """
                     ),
                     {
                         "rid": reviewer_id, "name": name, "email": email,
-                        "first_name": first_name, "last_name": last_name, "ts": ts,
+                        "first_name": first_name, "last_name": last_name,
+                        "profile_public": False, "ts": ts,
                     },
                 )
                 session.commit()
@@ -1918,10 +1921,11 @@ def admin_create_question(
                 text(
                     """
                     UPDATE analyst_questions
-                    SET featured = 0
+                    SET featured = :featured
                     WHERE context = 'research'
                     """
-                )
+                ),
+                {"featured": False},
             )
         session.execute(
             text(
@@ -1930,7 +1934,7 @@ def admin_create_question(
                     (question_id, context, title, body_markdown, prompts_json,
                      knowledge_area, sort_order, active, featured, created_at)
                 VALUES
-                    (:qid, 'research', :title, :body, :prompts, :area, 0, :active, :featured, :ts)
+                    (:qid, 'research', :title, :body, :prompts, :area, :sort_order, :active, :featured, :ts)
                 ON CONFLICT(question_id) DO UPDATE SET
                     title = excluded.title,
                     body_markdown = excluded.body_markdown,
@@ -1946,8 +1950,9 @@ def admin_create_question(
                 "body": payload.body_markdown,
                 "prompts": json.dumps(payload.prompts),
                 "area": payload.knowledge_area,
-                "active": 1 if payload.active else 0,
-                "featured": 1 if payload.featured else 0,
+                "sort_order": 0,
+                "active": payload.active,
+                "featured": payload.featured,
                 "ts": ts,
             },
         )
@@ -2050,7 +2055,7 @@ def submit_case_study(payload: CaseStudyRequest) -> Dict[str, Any]:
                          confidence_rating, published, created_at)
                     VALUES
                         (:cid, :rid, :rvid, :pid, :ai_missed, :decision_factors,
-                         :missing_variables, :data_sources, :conf, 1, :ts)
+                         :missing_variables, :data_sources, :conf, :published, :ts)
                     """
                 ),
                 {
@@ -2063,6 +2068,7 @@ def submit_case_study(payload: CaseStudyRequest) -> Dict[str, Any]:
                     "missing_variables": payload.missing_variables,
                     "data_sources": payload.data_sources,
                     "conf": payload.confidence_rating,
+                    "published": True,
                     "ts": ts,
                 },
             )

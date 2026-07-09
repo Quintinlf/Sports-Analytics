@@ -31,6 +31,9 @@ TABLES_IN_ORDER = [
 ]
 
 BOOL_COLUMNS: Dict[str, Set[str]] = {
+    "reviewers": {"profile_public"},
+    "analyst_questions": {"active", "featured"},
+    "analyst_case_studies": {"published"},
     "prediction_reviews": {"agree_with_model"},
     "review_outcomes": {
         "model_correct",
@@ -137,13 +140,20 @@ def _upsert_quintin(pg_engine) -> None:
                     (reviewer_id, favorite_sports, emails_enabled, wants_betting_section,
                      wants_explanations, wants_postgame_reviews, email_frequency, updated_at)
                 VALUES
-                    ('quintin', :sports, TRUE, TRUE, TRUE, TRUE, 'weekly', NOW())
+                    ('quintin', :sports, :emails_enabled, :wants_betting_section,
+                     :wants_explanations, :wants_postgame_reviews, 'weekly', NOW())
                 ON CONFLICT (reviewer_id) DO UPDATE SET
-                    emails_enabled = TRUE,
+                    emails_enabled = excluded.emails_enabled,
                     updated_at = NOW()
                 """
             ),
-            {"sports": '["MLB", "NBA"]'},
+            {
+                "sports": '["MLB", "NBA"]',
+                "emails_enabled": True,
+                "wants_betting_section": True,
+                "wants_explanations": True,
+                "wants_postgame_reviews": True,
+            },
         )
 
 

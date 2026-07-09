@@ -543,11 +543,20 @@ def _seed_trusted_analysts(conn, engine: Engine, ts: str) -> None:
                         (reviewer_id, favorite_sports, emails_enabled, wants_betting_section,
                          wants_explanations, wants_postgame_reviews, email_frequency, updated_at)
                     VALUES
-                        (:rid, :sports, 1, 1, 1, 1, 'weekly', :ts)
+                        (:rid, :sports, :emails_enabled, :wants_betting_section,
+                         :wants_explanations, :wants_postgame_reviews, 'weekly', :ts)
                     ON CONFLICT(reviewer_id) DO NOTHING
                     """
                 ),
-                {"rid": analyst["reviewer_id"], "sports": json.dumps(["MLB", "NBA"]), "ts": ts},
+                {
+                    "rid": analyst["reviewer_id"],
+                    "sports": json.dumps(["MLB", "NBA"]),
+                    "emails_enabled": True,
+                    "wants_betting_section": True,
+                    "wants_explanations": True,
+                    "wants_postgame_reviews": True,
+                    "ts": ts,
+                },
             )
 
 
@@ -598,7 +607,7 @@ def ensure_default_reviewers(engine: Engine) -> None:
                     """
                     INSERT INTO reviewers
                         (reviewer_id, name, email, first_name, last_name, analyst_role, profile_public, created_at)
-                    VALUES (:rid, :name, :email, :first_name, :last_name, 'analyst', 0, :ts)
+                    VALUES (:rid, :name, :email, :first_name, :last_name, 'analyst', :profile_public, :ts)
                     """
                 ),
                 {
@@ -607,6 +616,7 @@ def ensure_default_reviewers(engine: Engine) -> None:
                     "email": DEFAULT_REVIEWER_EMAIL,
                     "first_name": first,
                     "last_name": last,
+                    "profile_public": False,
                     "ts": ts,
                 },
             )
