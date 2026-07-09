@@ -403,7 +403,7 @@ REVIEWER_PROFILE_COLUMNS = [
     ("last_name", "TEXT"),
     ("bio", "TEXT"),
     ("analyst_role", "TEXT DEFAULT 'analyst'"),
-    ("profile_public", "BOOLEAN DEFAULT 0"),
+    ("profile_public", "BOOLEAN DEFAULT FALSE"),
     ("onboarding_completed_at", "TIMESTAMP"),
 ]
 

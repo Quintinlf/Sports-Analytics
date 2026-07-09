@@ -466,7 +466,7 @@ def _migrate_platform_columns(db_engine) -> None:
         q_cols = {c["name"] for c in sa_inspect(db_engine).get_columns("analyst_questions")}
         for col_name, ddl in [
             ("knowledge_area", "TEXT"),
-            ("featured", "BOOLEAN DEFAULT 0"),
+            ("featured", "BOOLEAN DEFAULT FALSE"),
         ]:
             if col_name not in q_cols:
                 conn.execute(text(f"ALTER TABLE analyst_questions ADD COLUMN {col_name} {ddl}"))

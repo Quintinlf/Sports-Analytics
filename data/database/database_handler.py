@@ -121,7 +121,7 @@ class SportsAnalyticsDB:
                 epaa_weight REAL,
                 model_versions TEXT,
                 iteration_count INTEGER DEFAULT 1,
-                retraining_triggered BOOLEAN DEFAULT 0,
+                retraining_triggered BOOLEAN DEFAULT FALSE,
                 prediction_timestamp TEXT NOT NULL,
                 notes TEXT,
                 model_version TEXT

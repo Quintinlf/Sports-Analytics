@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Integer, JSON, String, Text, UniqueConstraint, false, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -65,7 +65,7 @@ class Reviewer(Base):
     last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
     analyst_role: Mapped[str] = mapped_column(String(30), nullable=False, default="analyst", server_default="analyst")
-    profile_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    profile_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -81,7 +81,7 @@ class AnalystQuestion(Base):
     knowledge_area: Mapped[str | None] = mapped_column(String(80), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    featured: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    featured: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -110,7 +110,7 @@ class AnalystCaseStudy(Base):
     missing_variables: Mapped[str] = mapped_column(Text, nullable=False)
     data_sources: Mapped[str] = mapped_column(Text, nullable=False)
     confidence_rating: Mapped[int] = mapped_column(Integer, nullable=False)
-    published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+    published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
