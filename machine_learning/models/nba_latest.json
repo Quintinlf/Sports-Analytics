@@ -1,0 +1,7 @@
+{
+  "version": "v20260328_205655",
+  "gp_path": "gp_v20260328_205655.pkl",
+  "lgbm_quantile_path": "lgbm_quantile_v20260328_205655.pkl",
+  "lgbm_win_path": "lgbm_win_v20260328_205655.pkl",
+  "elo_path": "elo_v20260328_205655.pkl"
+}

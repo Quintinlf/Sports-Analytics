@@ -825,6 +825,21 @@ body {
   margin-bottom: 10px;
 }
 
+.onboarding-prompt {
+  font-size: 0.9rem;
+  color: var(--text);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.onboarding-example {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  font-style: italic;
+  margin-bottom: 10px;
+  line-height: 1.45;
+}
+
 .onboarding-question label {
   font-size: 0.78rem;
   font-weight: 600;
@@ -867,6 +882,13 @@ body {
   color: var(--text-dim);
   margin-bottom: 12px;
   line-height: 1.55;
+  overflow-x: auto;
+}
+
+.research-body .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
 }
 
 .knowledge-badge {
@@ -881,6 +903,39 @@ body {
   border-radius: 999px;
   padding: 4px 10px;
   margin-bottom: 10px;
+}
+
+.knowledge-badge[data-area="UX"] {
+  color: #f472b6;
+  background: rgba(244, 114, 182, 0.12);
+  border-color: rgba(244, 114, 182, 0.35);
+}
+
+.knowledge-badge[data-area="Game Theory"] {
+  color: #a78bfa;
+  background: rgba(167, 139, 250, 0.12);
+  border-color: rgba(167, 139, 250, 0.35);
+}
+
+.knowledge-badge[data-area="MLB"],
+.knowledge-badge[data-area="NBA"],
+.knowledge-badge[data-area="FIFA"] {
+  color: var(--accent);
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+.missing-info-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.82rem;
+  color: var(--amber);
+  line-height: 1.6;
+}
+
+.missing-info-list li {
+  margin-bottom: 2px;
 }
 
 .case-study-alert {

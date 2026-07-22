@@ -268,11 +268,21 @@ class EnsemblePredictor:
             return 0.5, 0.0
 
     def _lgbm_win_predict(self, features: pd.DataFrame) -> Dict:
-        """Return prediction dict from LGBMWinPredictor, or fallback."""
+        """Return prediction dict from LGBMWinPredictor, or fallback.
+
+        predict_win_probability() returns array-valued fields (shape (n,),
+        n=1 for a single-row matchup) since it's built for batched inference.
+        Index down to native floats here so downstream blending in predict()
+        never mixes numpy arrays with plain floats.
+        """
         if self.lgbm_win is None:
             return {'win_prob': 0.5, 'point_diff': 0.0}
         try:
-            return self.lgbm_win.predict_win_probability(features)
+            out = self.lgbm_win.predict_win_probability(features)
+            return {
+                'win_prob': float(np.asarray(out['win_prob']).reshape(-1)[0]),
+                'point_diff': float(np.asarray(out['point_diff']).reshape(-1)[0]),
+            }
         except Exception:
             return {'win_prob': 0.5, 'point_diff': 0.0}
 

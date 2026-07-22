@@ -1,0 +1,24 @@
+{
+  "version": "v20260711_220531",
+  "lgbm_quantile_path": "mlb_lgbm_quantile_v20260711_220531.pkl",
+  "lgbm_win_path": "mlb_lgbm_win_v20260711_220531.pkl",
+  "feature_cols": [
+    "HOME_R_ROLL",
+    "AWAY_R_ROLL",
+    "HOME_RA_ROLL",
+    "AWAY_RA_ROLL",
+    "HOME_WIN_STREAK",
+    "AWAY_WIN_STREAK",
+    "HOME_REST_DAYS",
+    "AWAY_REST_DAYS",
+    "HOME_IS_BACK_TO_BACK",
+    "AWAY_IS_BACK_TO_BACK",
+    "HOME_WIN_RATE_10",
+    "AWAY_WIN_RATE_10"
+  ],
+  "trained_at": "2026-07-11T22:07:44.568818",
+  "metrics": {
+    "accuracy": 0.558091286307054,
+    "brier_score": 0.2402135133420643
+  }
+}

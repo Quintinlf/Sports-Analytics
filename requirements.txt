@@ -43,6 +43,10 @@ python-dotenv>=1.0.0
 # NBA Data (if using API)
 # nba_api>=1.1.0  # Uncomment if fetching live NBA data
 
+# Sports Data (for training/mlb_trainer.py and training/fifa_trainer.py)
+MLB-StatsAPI>=1.6.0
+soccerdata>=1.6.0  # FBref scraper for training/fifa_trainer.py; not needed at inference time
+
 # Notes:
 # - scikit-learn's Gaussian Process module is included in the base package
 # - For datasets > 10,000 samples, consider GPyTorch for scalability

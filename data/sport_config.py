@@ -91,7 +91,7 @@ SPORT_CONFIG: Dict[str, Dict[str, Any]] = {
             ],
             "box_score_stats": [],
         },
-        "model_type": "elo_xgboost",
+        "model_type": "lightgbm",
         "email": {
             "icon": "⚾",
             "report_title": "MLB Game Predictions Report",

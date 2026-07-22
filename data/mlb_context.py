@@ -119,10 +119,7 @@ def build_mlb_context(game: Dict[str, Any]) -> Dict[str, Any]:
             "value": str(away_pitcher["era"]),
         })
     if not explanations:
-        explanations = [
-            {"label": "Starting Pitcher", "weight": 0.25, "value": "Data pending"},
-            {"label": "Recent Form", "weight": 0.20, "value": "—"},
-        ]
+        explanations = []
 
     return {
         "starting_pitchers": {"home": home_pitcher, "away": away_pitcher},

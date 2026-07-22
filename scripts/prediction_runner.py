@@ -44,12 +44,33 @@ def sync_predictions_to_database(engine: Engine, predictions: list[dict[str, Any
 
 
 def run_live_prediction_pipeline(engine: Engine) -> bool:
-    """Fetch live predictions and sync them to the database."""
+    """Fetch live predictions and sync them to the database.
+
+    Returns False if ANY sport failed with an error (e.g. its model
+    couldn't load) — even when other sports succeeded — so the cron job
+    exits non-zero and the failure is visible in GitHub Actions instead of
+    reading as a clean run with a quietly-missing sport.
+    """
     service = create_prediction_service()
     logger.info("Polling live sports registries for current game schedules...")
-    predictions = service.fetch_all()
+    predictions = service.fetch_all(engine=engine)
+    failures = dict(service.last_run_failures)
+
     if not predictions:
         logger.warning("Live sports streams returned no predictions.")
+        if failures:
+            logger.error("No predictions were produced, and these sports errored: %s", failures)
         return False
+
     logger.info("Synchronizing %s prediction(s) to database...", len(predictions))
-    return service.sync_to_database(engine, predictions, insert_prediction)
+    synced = service.sync_to_database(engine, predictions, insert_prediction)
+
+    if failures:
+        logger.error(
+            "Run produced predictions for some sports, but these sports errored "
+            "and contributed NOTHING this run: %s",
+            failures,
+        )
+        return False
+
+    return synced
