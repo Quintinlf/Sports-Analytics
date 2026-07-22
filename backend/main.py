@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 print("[DEBUG] __name__ =", __name__)
 
 import backend.config  # noqa: F401 — load .env before other backend imports
+from backend.config import get_cors_origins
 
 from datetime import date
 from typing import Any, Dict
@@ -266,7 +267,7 @@ FORM_SCHEMA: Dict[str, Any] = {
 app = FastAPI(title="Sports Analytics Analyst Platform")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -20,6 +20,62 @@ let selectedSport = "ALL";
 let lastPregamePick = null;
 let lastPregameAgreeWithModel = null;
 
+// Inert math placeholders — marked must not rewrite these (unlike __MATH_*__).
+const MATH_BLOCK_TOKEN = (i) => `%%MATH_BLOCK_${i}%%`;
+const MATH_INLINE_TOKEN = (i) => `%%MATH_INLINE_${i}%%`;
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function sanitizeHtml(html) {
+  if (typeof DOMPurify !== "undefined") {
+    return DOMPurify.sanitize(html, {
+      USE_PROFILES: { html: true, mathMl: true, svg: true },
+      ADD_ATTR: ["class", "style"],
+    });
+  }
+  return escapeHtml(html);
+}
+
+function setSanitizedHtml(el, html) {
+  if (!el) return;
+  el.innerHTML = sanitizeHtml(html);
+}
+
+function clearChildren(el) {
+  if (!el) return;
+  while (el.firstChild) el.removeChild(el.firstChild);
+}
+
+function appendText(el, tag, text, className) {
+  const child = document.createElement(tag);
+  if (className) child.className = className;
+  child.textContent = text;
+  el.appendChild(child);
+  return child;
+}
+
+function simpleMarkdownBold(text) {
+  const parts = String(text ?? "").split(/(\*\*[^*]+\*\*)/g);
+  const frag = document.createDocumentFragment();
+  for (const part of parts) {
+    if (/^\*\*[^*]+\*\*$/.test(part)) {
+      const strong = document.createElement("strong");
+      strong.textContent = part.slice(2, -2);
+      frag.appendChild(strong);
+    } else {
+      frag.appendChild(document.createTextNode(part));
+    }
+  }
+  return frag;
+}
+
 // ---------------------------------------------------------------------------
 // Toast
 // ---------------------------------------------------------------------------
@@ -57,7 +113,17 @@ function initStars() {
 // Analyst profile & onboarding
 // ---------------------------------------------------------------------------
 function welcomeLabel(data) {
-  return data.display_name || data.name || "Analyst";
+  const first = (data.first_name || "").trim();
+  if (first) return first;
+  const display = (data.display_name || data.name || "").trim();
+  if (display) return display.split(/\s+/)[0];
+  return "Analyst";
+}
+
+function promptText(prompt) {
+  if (!prompt) return "";
+  if (typeof prompt === "string") return prompt;
+  return prompt.prompt || "";
 }
 
 function applyReviewerProfile(data) {
@@ -65,7 +131,9 @@ function applyReviewerProfile(data) {
 
   const roleBadge = document.getElementById("analyst-role-badge");
   if (data.analyst_role && data.analyst_role !== "analyst") {
-    roleBadge.textContent = data.analyst_role.replace(/_/g, " ");
+    roleBadge.textContent = data.analyst_role
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, c => c.toUpperCase());
     roleBadge.style.display = "inline-block";
   } else {
     roleBadge.style.display = "none";
@@ -99,18 +167,33 @@ async function loadOnboardingQuestions() {
 
 function renderOnboardingModal(questions) {
   const root = document.getElementById("onboarding-questions");
-  root.innerHTML = "";
+  clearChildren(root);
   for (const q of questions) {
     const block = document.createElement("div");
     block.className = "onboarding-question";
-    const prompts = (q.prompts || []).map(p => `<p style="margin-bottom:8px">${p}</p>`).join("");
-    block.innerHTML = `
-      <h3>${q.title}</h3>
-      <div class="body">${q.body_markdown.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")}</div>
-      ${prompts}
-      <label for="onboard-${q.question_id}">Your answer</label>
-      <textarea id="onboard-${q.question_id}" data-question-id="${q.question_id}"></textarea>
-    `;
+    const prompt = (q.prompts || [])[0] || {};
+    const promptLine = promptText(prompt);
+
+    appendText(block, "h3", q.title || "");
+    const body = document.createElement("div");
+    body.className = "body";
+    body.appendChild(simpleMarkdownBold(q.body_markdown || ""));
+    block.appendChild(body);
+
+    if (promptLine) appendText(block, "p", promptLine, "onboarding-prompt");
+    if (prompt.example) appendText(block, "p", prompt.example, "onboarding-example");
+
+    const label = document.createElement("label");
+    label.htmlFor = `onboard-${q.question_id}`;
+    label.textContent = "Your answer";
+    block.appendChild(label);
+
+    const textarea = document.createElement("textarea");
+    textarea.id = `onboard-${q.question_id}`;
+    textarea.dataset.questionId = q.question_id;
+    textarea.placeholder = prompt.placeholder || "";
+    block.appendChild(textarea);
+
     root.appendChild(block);
   }
 }
@@ -126,6 +209,11 @@ async function maybeShowOnboarding() {
 
   onboardingQuestions = await loadOnboardingQuestions();
   if (!onboardingQuestions.length) return;
+
+  const titleEl = document.getElementById("onboarding-welcome-title");
+  if (titleEl) {
+    titleEl.textContent = `Welcome, ${welcomeLabel(currentReviewer)}`;
+  }
 
   renderOnboardingModal(onboardingQuestions);
   document.getElementById("onboarding-modal").style.display = "flex";
@@ -164,6 +252,7 @@ function applyReviewerSession(data, history, customSections) {
   currentReviewer = {
     reviewer_id: data.reviewer_id,
     name: data.name,
+    first_name: data.first_name,
     display_name: data.display_name || data.name,
     analyst_role: data.analyst_role,
     onboarding_completed_at: data.onboarding_completed_at,
@@ -188,14 +277,40 @@ function applyReviewerSession(data, history, customSections) {
 
 function renderMarkdownMath(el, text) {
   if (!el || !text) return;
-  if (typeof marked !== "undefined") {
-    el.innerHTML = marked.parse(text);
-  } else {
-    el.textContent = text;
+  const placeholders = [];
+  let work = text;
+
+  work = work.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
+    const id = placeholders.length;
+    placeholders.push({ type: "display", math: math.trim() });
+    return MATH_BLOCK_TOKEN(id);
+  });
+  work = work.replace(/(?<!\$)\$([^\$\n]+?)\$(?!\$)/g, (_, math) => {
+    const id = placeholders.length;
+    placeholders.push({ type: "inline", math: math.trim() });
+    return MATH_INLINE_TOKEN(id);
+  });
+
+  let html = typeof marked !== "undefined" ? marked.parse(work) : work.replace(/\n/g, "<br>");
+
+  for (let i = 0; i < placeholders.length; i++) {
+    const p = placeholders[i];
+    let rendered = escapeHtml(p.math);
+    try {
+      if (typeof katex !== "undefined") {
+        rendered = katex.renderToString(p.math, {
+          throwOnError: false,
+          displayMode: p.type === "display",
+        });
+      }
+    } catch {
+      rendered = escapeHtml(p.math);
+    }
+    const token = p.type === "display" ? MATH_BLOCK_TOKEN(i) : MATH_INLINE_TOKEN(i);
+    html = html.split(token).join(rendered);
   }
-  if (typeof renderMathInElement !== "undefined") {
-    renderMathInElement(el, { delimiters: [{ left: "$$", right: "$$", display: true }, { left: "$", right: "$", display: false }] });
-  }
+
+  setSanitizedHtml(el, html);
 }
 
 async function loadResearchQuestion() {
@@ -211,14 +326,23 @@ async function loadResearchQuestion() {
     document.getElementById("research-title").textContent = currentResearchQuestion.title;
     const areaEl = document.getElementById("research-knowledge-area");
     areaEl.textContent = currentResearchQuestion.knowledge_area || "Research";
+    areaEl.dataset.area = currentResearchQuestion.knowledge_area || "Research";
     renderMarkdownMath(document.getElementById("research-body"), currentResearchQuestion.body_markdown);
     const promptsRoot = document.getElementById("research-prompts");
-    promptsRoot.innerHTML = "";
+    clearChildren(promptsRoot);
     const existing = currentResearchQuestion.existing_answer?.answer || "";
     (currentResearchQuestion.prompts || []).forEach((prompt, i) => {
+      const labelText = promptText(prompt);
       const block = document.createElement("div");
       block.className = "onboarding-question";
-      block.innerHTML = `<label>${prompt}</label><textarea id="research-answer-${i}" data-prompt="${prompt}">${existing}</textarea>`;
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      const textarea = document.createElement("textarea");
+      textarea.id = `research-answer-${i}`;
+      textarea.dataset.prompt = labelText;
+      textarea.value = existing;
+      block.appendChild(label);
+      block.appendChild(textarea);
       promptsRoot.appendChild(block);
     });
     loadComments("research_question", currentResearchQuestion.question_id, "research-comments");
@@ -234,7 +358,8 @@ async function submitResearchAnswer() {
   const prompts = currentResearchQuestion.prompts || [];
   const parts = prompts.map((p, i) => {
     const el = document.getElementById(`research-answer-${i}`);
-    return `${p}\n${(el?.value || "").trim()}`;
+    const label = promptText(p);
+    return `${label}\n${(el?.value || "").trim()}`;
   });
   const answer = parts.join("\n\n").trim();
   if (!answer) { toast("Please answer the research question", "error"); return; }
@@ -308,14 +433,16 @@ async function loadComments(targetType, targetId, containerId) {
   const res = await fetch(
     `${API}/api/feedback/comments?target_type=${encodeURIComponent(targetType)}&target_id=${encodeURIComponent(targetId)}`
   );
-  if (!res.ok) { root.innerHTML = ""; return; }
+  if (!res.ok) { clearChildren(root); return; }
   const comments = await res.json();
-  root.innerHTML = "<p class='conf-label'>Discussion</p>";
+  clearChildren(root);
+  appendText(root, "p", "Discussion", "conf-label");
   for (const c of comments) {
     const el = document.createElement("div");
     el.className = "comment-item";
     const name = c.first_name || c.name || "Analyst";
-    el.innerHTML = `<strong>${name}</strong><p>${c.body}</p>`;
+    appendText(el, "strong", name);
+    appendText(el, "p", c.body || "");
     root.appendChild(el);
   }
 }
@@ -370,12 +497,13 @@ async function handleReviewerLogin() {
 
 function renderCustomSections(sections) {
   const root = document.getElementById("reviewer-custom-sections");
-  root.innerHTML = "";
+  clearChildren(root);
   if (!sections || !sections.length) return;
   for (const section of sections) {
     const el = document.createElement("div");
     el.className = "custom-section";
-    el.innerHTML = `<h4>${section.title}</h4><p>${section.content}</p>`;
+    appendText(el, "h4", section.title || "");
+    appendText(el, "p", section.content || "");
     root.appendChild(el);
   }
 }
@@ -387,25 +515,37 @@ function renderReviewerStats(stats) {
   document.getElementById("stat-acc").textContent      = stats.reviewer_accuracy + "%";
 
   const sportChips = document.getElementById("sport-chips");
-  sportChips.innerHTML = "";
+  clearChildren(sportChips);
   const emojis = { MLB: "⚾", NBA: "🏀", FIFA: "⚽" };
   for (const [sport, s] of Object.entries(stats.by_sport || {})) {
     const chip = document.createElement("span");
     chip.className = "sport-chip";
-    chip.innerHTML = `<span class="sport-name">${emojis[sport] || ""} ${sport}</span>`
-      + `<span class="sport-stat">${s.reviews} reviews · ${s.beat_ai} beat AI</span>`;
+    appendText(chip, "span", `${emojis[sport] || ""} ${sport}`, "sport-name");
+    appendText(chip, "span", `${s.reviews} reviews · ${s.beat_ai} beat AI`, "sport-stat");
     sportChips.appendChild(chip);
   }
   if (!Object.keys(stats.by_sport || {}).length) {
-    sportChips.innerHTML = `<span class="sport-chip"><span class="sport-stat">No reviews yet — pick a prediction below</span></span>`;
+    const chip = document.createElement("span");
+    chip.className = "sport-chip";
+    appendText(chip, "span", "No reviews yet — pick a prediction below", "sport-stat");
+    sportChips.appendChild(chip);
   }
 }
 
 function renderHistory(history) {
   const tbody = document.getElementById("history-tbody");
-  tbody.innerHTML = "";
+  clearChildren(tbody);
   if (!history.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="empty-state" style="padding:20px;text-align:center;color:var(--text-dim)">No past predictions yet.</td></tr>`;
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 7;
+    td.className = "empty-state";
+    td.style.padding = "20px";
+    td.style.textAlign = "center";
+    td.style.color = "var(--text-dim)";
+    td.textContent = "No past predictions yet.";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
     return;
   }
   const badgeMap = {
@@ -419,14 +559,22 @@ function renderHistory(history) {
   for (const row of history) {
     const b = badgeMap[row.badge] || badgeMap.pending;
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${row.game_date}</td>
-      <td>${SPORT_EMOJI[row.sport] || ""} ${row.matchup}</td>
-      <td>${row.ai_pick}</td>
-      <td>${row.reviewer_pick}</td>
-      <td>${row.actual_winner || "—"}</td>
-      <td><span class="badge ${b.cls}">${b.txt}</span></td>
-    `;
+    const cells = [
+      row.game_date,
+      `${SPORT_EMOJI[row.sport] || ""} ${row.matchup}`,
+      row.ai_pick,
+      row.reviewer_pick,
+      row.actual_winner || "—",
+    ];
+    for (const text of cells) {
+      appendText(tr, "td", text);
+    }
+    const badgeTd = document.createElement("td");
+    const badge = document.createElement("span");
+    badge.className = `badge ${b.cls}`;
+    badge.textContent = b.txt;
+    badgeTd.appendChild(badge);
+    tr.appendChild(badgeTd);
     tbody.appendChild(tr);
   }
 }
@@ -458,17 +606,31 @@ function setupSportTabs() {
 
 async function loadPredictions() {
   const grid = document.getElementById("pred-grid");
-  grid.innerHTML = `<div class="spinner"></div>`;
+  clearChildren(grid);
+  const spinner = document.createElement("div");
+  spinner.className = "spinner";
+  grid.appendChild(spinner);
 
   const query = selectedSport !== "ALL" ? `?sport=${encodeURIComponent(selectedSport)}` : "";
   const res = await fetch(`${API}/api/feedback/predictions${query}`, { cache: "no-store" });
-  if (!res.ok) { grid.innerHTML = `<p style="color:var(--red)">Failed to load predictions.</p>`; return; }
+  if (!res.ok) {
+    clearChildren(grid);
+    const err = document.createElement("p");
+    err.style.color = "var(--red)";
+    err.textContent = "Failed to load predictions.";
+    grid.appendChild(err);
+    return;
+  }
   const preds = await res.json();
   console.log(`[Feedback] Loaded ${preds.length} predictions for filter=${selectedSport}`);
 
-  grid.innerHTML = "";
+  clearChildren(grid);
   if (!preds.length) {
-    grid.innerHTML = `<div class="empty-state"><div class="icon">🔍</div><p>No predictions available.</p></div>`;
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    appendText(empty, "div", "🔍", "icon");
+    appendText(empty, "p", "No predictions available.");
+    grid.appendChild(empty);
     return;
   }
 
@@ -481,15 +643,32 @@ async function loadPredictions() {
     tile.className = "pred-tile" + (isWorldCup ? " pred-tile--world-cup" : "");
     tile.dataset.id = p.prediction_id;
     const dotCls = p.settled ? "settled" : "unsettled";
-    tile.innerHTML = `
-      <div class="sport-emoji">${emoji}</div>
-      ${leagueLabel ? `<div class="game-league">${leagueLabel}</div>` : ""}
-      <div class="game-teams">${p.away_team} <span style="color:var(--muted)">@</span> ${p.home_team}</div>
-      <div class="game-date">
-        <span class="settled-dot ${dotCls}"></span>
-        ${p.game_date} · <span class="conf-badge ${(p.confidence_level||'low').toLowerCase()}">${p.confidence_level}</span>
-      </div>
-    `;
+
+    appendText(tile, "div", emoji, "sport-emoji");
+    if (leagueLabel) appendText(tile, "div", leagueLabel, "game-league");
+
+    const teams = document.createElement("div");
+    teams.className = "game-teams";
+    teams.appendChild(document.createTextNode(`${p.away_team} `));
+    const at = document.createElement("span");
+    at.style.color = "var(--muted)";
+    at.textContent = "@";
+    teams.appendChild(at);
+    teams.appendChild(document.createTextNode(` ${p.home_team}`));
+    tile.appendChild(teams);
+
+    const dateRow = document.createElement("div");
+    dateRow.className = "game-date";
+    const dot = document.createElement("span");
+    dot.className = `settled-dot ${dotCls}`;
+    dateRow.appendChild(dot);
+    dateRow.appendChild(document.createTextNode(` ${p.game_date} · `));
+    const conf = document.createElement("span");
+    conf.className = `conf-badge ${(p.confidence_level || "low").toLowerCase()}`;
+    conf.textContent = p.confidence_level || "";
+    dateRow.appendChild(conf);
+    tile.appendChild(dateRow);
+
     tile.addEventListener("click", () => selectPrediction(p.prediction_id, tile));
     grid.appendChild(tile);
   }
@@ -515,6 +694,28 @@ async function selectPrediction(id, tileEl) {
 // ---------------------------------------------------------------------------
 // AI card
 // ---------------------------------------------------------------------------
+function isMeaningfulExplanation(e) {
+  const v = e?.value;
+  if (v === null || v === undefined) return false;
+  const s = String(v).trim();
+  if (!s || s === "—" || s === "-" || s === "–") return false;
+  if (/^data\s*pending$/i.test(s)) return false;
+  return true;
+}
+
+const MISSING_DATA_LABELS = {
+  probable_starter_unconfirmed: "Starting lineup unavailable",
+  lineup_unavailable: "Starting lineup unavailable",
+  injury_report_unavailable: "Injury report unavailable",
+  advanced_metrics_unavailable: "Advanced metrics unavailable",
+  pitcher_stats_unavailable: "Starter stats unavailable",
+  bullpen_workload_unavailable: "Bullpen workload unavailable",
+};
+
+function formatMissingWarning(code) {
+  return MISSING_DATA_LABELS[code] || code.replace(/_/g, " ");
+}
+
 function shortLabel(label) {
   const map = {
     "ELO Difference": "ELO",
@@ -576,56 +777,66 @@ function renderAICard(pred) {
   document.getElementById("conf-badge-label").textContent = pred.confidence_level;
   document.getElementById("conf-badge-label").className = `conf-badge ${cl}`;
 
-  const exps = pred.explanations || [];
+  const exps = (pred.explanations || []).filter(isMeaningfulExplanation);
   const cardsRoot = document.getElementById("explanation-cards");
-  cardsRoot.innerHTML = "";
+  const featureSection = document.getElementById("feature-bars");
+  clearChildren(cardsRoot);
   if (exps.length) {
     for (const e of exps) {
       const card = document.createElement("div");
       card.className = "metric-card";
-      card.innerHTML = `
-        <div class="k">${shortLabel(e.label)}</div>
-        <div class="v">${e.value ?? "—"}</div>
-      `;
+      appendText(card, "div", shortLabel(e.label), "k");
+      appendText(card, "div", String(e.value), "v");
       cardsRoot.appendChild(card);
     }
+    cardsRoot.parentElement.style.display = "block";
   } else {
-    cardsRoot.innerHTML = `<p style="color:var(--text-dim);font-size:.82rem">No explanation metrics available.</p>`;
+    cardsRoot.parentElement.style.display = "none";
   }
 
   // Weighted reasoning bars (normalized, no raw JSON)
-  const container = document.getElementById("feature-bars");
-  container.innerHTML = "";
+  clearChildren(featureSection);
   if (exps.length) {
     for (const e of exps) {
       const pct = Math.round((e.weight || 0) * 100);
       const row = document.createElement("div");
       row.className = "feature-row";
-      row.innerHTML = `
-        <span class="feature-label">${e.label}</span>
-        <div class="feature-bar-track">
-          <div class="feature-bar-fill" style="width:0%" data-pct="${pct}"></div>
-        </div>
-        <span class="feature-weight">${pct}%</span>
-      `;
-      container.appendChild(row);
+      appendText(row, "span", e.label || "", "feature-label");
+      const track = document.createElement("div");
+      track.className = "feature-bar-track";
+      const fill = document.createElement("div");
+      fill.className = "feature-bar-fill";
+      fill.style.width = "0%";
+      fill.dataset.pct = String(pct);
+      track.appendChild(fill);
+      row.appendChild(track);
+      appendText(row, "span", `${pct}%`, "feature-weight");
+      featureSection.appendChild(row);
     }
     setTimeout(() => {
-      container.querySelectorAll(".feature-bar-fill").forEach(el => {
+      featureSection.querySelectorAll(".feature-bar-fill").forEach(el => {
         el.style.width = el.dataset.pct + "%";
       });
     }, 80);
-  } else {
-    container.innerHTML = "";
   }
 
-  document.getElementById("exp-betting").innerHTML = `
-    <div class="metric-cards">
-      <div class="metric-card"><div class="k">Predicted Winner</div><div class="v">${pred.predicted_winner || "—"}</div></div>
-      <div class="metric-card"><div class="k">Win Probability</div><div class="v">${Math.round((pred.win_probability || pred.confidence_pct || 0) * 100)}%</div></div>
-      <div class="metric-card"><div class="k">Confidence</div><div class="v">${pred.confidence_level || "—"}</div></div>
-    </div>
-  `;
+  const bettingRoot = document.getElementById("exp-betting");
+  clearChildren(bettingRoot);
+  const bettingCards = document.createElement("div");
+  bettingCards.className = "metric-cards";
+  const bettingItems = [
+    ["Predicted Winner", pred.predicted_winner || "—"],
+    ["Win Probability", `${Math.round((pred.win_probability || pred.confidence_pct || 0) * 100)}%`],
+    ["Confidence", pred.confidence_level || "—"],
+  ];
+  for (const [k, v] of bettingItems) {
+    const card = document.createElement("div");
+    card.className = "metric-card";
+    appendText(card, "div", k, "k");
+    appendText(card, "div", v, "v");
+    bettingCards.appendChild(card);
+  }
+  bettingRoot.appendChild(bettingCards);
 
   const mlbBlock = document.getElementById("mlb-context-block");
   const warnBlock = document.getElementById("missing-data-warnings");
@@ -633,20 +844,33 @@ function renderAICard(pred) {
     const hp = pred.starting_pitchers.home || {};
     const ap = pred.starting_pitchers.away || {};
     mlbBlock.style.display = "block";
-    mlbBlock.innerHTML = `
-      <div class="conf-label" style="margin-bottom:8px">Starting Pitchers</div>
-      <div class="metric-cards">
-        <div class="metric-card"><div class="k">Away: ${ap.name || "TBD"}</div><div class="v">ERA ${ap.era ?? "—"} · WHIP ${ap.whip ?? "—"}</div></div>
-        <div class="metric-card"><div class="k">Home: ${hp.name || "TBD"}</div><div class="v">ERA ${hp.era ?? "—"} · WHIP ${hp.whip ?? "—"}</div></div>
-      </div>`;
+    clearChildren(mlbBlock);
+    appendText(mlbBlock, "div", "Starting Pitchers", "conf-label").style.marginBottom = "8px";
+    const pitcherCards = document.createElement("div");
+    pitcherCards.className = "metric-cards";
+    for (const [side, pitcher] of [["Away", ap], ["Home", hp]]) {
+      const card = document.createElement("div");
+      card.className = "metric-card";
+      appendText(card, "div", `${side}: ${pitcher.name || "TBD"}`, "k");
+      appendText(card, "div", `ERA ${pitcher.era ?? "—"} · WHIP ${pitcher.whip ?? "—"}`, "v");
+      pitcherCards.appendChild(card);
+    }
+    mlbBlock.appendChild(pitcherCards);
   } else {
     mlbBlock.style.display = "none";
-    mlbBlock.innerHTML = "";
+    clearChildren(mlbBlock);
   }
   const warnings = pred.missing_data_warnings || [];
   if (warnings.length) {
     warnBlock.style.display = "block";
-    warnBlock.textContent = "Missing data: " + warnings.map(w => w.replace(/_/g, " ")).join(", ");
+    clearChildren(warnBlock);
+    appendText(warnBlock, "div", "Missing information", "conf-label").style.marginBottom = "6px";
+    const ul = document.createElement("ul");
+    ul.className = "missing-info-list";
+    for (const w of warnings) {
+      appendText(ul, "li", `⚠ ${formatMissingWarning(w)}`);
+    }
+    warnBlock.appendChild(ul);
   } else {
     warnBlock.style.display = "none";
     warnBlock.textContent = "";
@@ -668,12 +892,16 @@ async function loadMissingFactors(sport) {
   const data = await res.json();
 
   const container = document.getElementById("missing-factors-group");
-  container.innerHTML = "";
+  clearChildren(container);
   for (const factor of data.factors) {
-    const id = "mf-" + factor.replace(/\s+/g, "-").toLowerCase();
     const label = document.createElement("label");
     label.className = "check-item";
-    label.innerHTML = `<input type="checkbox" name="missing_factor" value="${factor}"> ${factor}`;
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.name = "missing_factor";
+    input.value = factor;
+    label.appendChild(input);
+    label.appendChild(document.createTextNode(` ${factor}`));
     container.appendChild(label);
   }
 }
@@ -821,11 +1049,16 @@ function showPostgameSection(reviewId) {
     .then(r => r.json())
     .then(data => {
       const cg = document.getElementById("postgame-factors-group");
-      cg.innerHTML = "";
+      clearChildren(cg);
       for (const f of data.postgame_factors) {
         const label = document.createElement("label");
         label.className = "check-item";
-        label.innerHTML = `<input type="checkbox" name="pg_factor" value="${f}"> ${f}`;
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.name = "pg_factor";
+        input.value = f;
+        label.appendChild(input);
+        label.appendChild(document.createTextNode(` ${f}`));
         cg.appendChild(label);
       }
     });
