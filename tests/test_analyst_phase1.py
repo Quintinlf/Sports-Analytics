@@ -28,7 +28,11 @@ class TestAnalystPhase1(unittest.TestCase):
         self._tmpdir = tempfile.TemporaryDirectory()
         db_path = os.path.join(self._tmpdir.name, "phase1.db")
         self.engine = create_database_engine(f"sqlite:///{db_path}")
-        init_platform(self.engine)
+        # These tests exercise review/case-study flows against *some* existing
+        # prediction row, not real model output — opt into the demo seed data
+        # (off by default in production) so init_platform() populates one.
+        with patch.dict(os.environ, {"ENABLE_DEMO_PREDICTIONS": "true"}):
+            init_platform(self.engine)
         self._Session = sessionmaker(bind=self.engine, autoflush=False, autocommit=False)
 
         @contextmanager
@@ -82,7 +86,8 @@ class TestAnalystPhase1(unittest.TestCase):
         self.assertEqual(_split_display_name("Jane Doe"), ("Jane", "Doe"))
 
     def test_trusted_analyst_seeds(self) -> None:
-        ensure_default_reviewers(self.engine)
+        with patch.dict(os.environ, {"ENABLE_DEMO_PREDICTIONS": "true"}):
+            ensure_default_reviewers(self.engine)
         with self.engine.connect() as conn:
             for analyst in TRUSTED_ANALYSTS:
                 row = conn.execute(
@@ -98,6 +103,27 @@ class TestAnalystPhase1(unittest.TestCase):
                 self.assertEqual(row["analyst_role"], "trusted_analyst")
                 self.assertTrue(bool(row["profile_public"]))
                 self.assertEqual(row["first_name"], analyst["first_name"])
+
+    def test_trusted_analysts_not_seeded_without_demo_flag(self) -> None:
+        import tempfile
+        from scripts.db_utils import create_database_engine
+
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = create_database_engine(f"sqlite:///{tmp}/no_demo.db")
+            # Create reviewers table via ensure with demo off.
+            with patch.dict(os.environ, {"ENABLE_DEMO_PREDICTIONS": ""}, clear=False):
+                # Remove the key if present
+                os.environ.pop("ENABLE_DEMO_PREDICTIONS", None)
+                init_platform(engine)
+                ensure_default_reviewers(engine)
+            with engine.connect() as conn:
+                for analyst in TRUSTED_ANALYSTS:
+                    row = conn.execute(
+                        text("SELECT reviewer_id FROM reviewers WHERE reviewer_id = :rid"),
+                        {"rid": analyst["reviewer_id"]},
+                    ).first()
+                    self.assertIsNone(row, msg=f"unexpected seed {analyst['reviewer_id']}")
+            engine.dispose()
 
     def test_onboarding_questions_seeded(self) -> None:
         with self.engine.connect() as conn:
@@ -169,7 +195,8 @@ class TestAnalystPhase1(unittest.TestCase):
         self.assertGreaterEqual(count, 4)
 
     def test_trusted_analyst_preferences_seeded_as_booleans(self) -> None:
-        ensure_default_reviewers(self.engine)
+        with patch.dict(os.environ, {"ENABLE_DEMO_PREDICTIONS": "true"}):
+            ensure_default_reviewers(self.engine)
         with self.engine.connect() as conn:
             prefs = conn.execute(
                 text(
@@ -200,8 +227,110 @@ class TestAnalystPhase1(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertEqual(data["question_id"], "research-nash-equilibrium")
+        self.assertEqual(
+            data["title"],
+            "Can modeling opponents' decisions improve sports prediction?",
+        )
         self.assertEqual(data["knowledge_area"], "Game Theory")
+        self.assertIn("Nash equilibrium", data["body_markdown"])
         self.assertIn("prompts", data)
+
+    def test_onboarding_sports_expertise_prompt(self) -> None:
+        questions = self.client.get("/api/feedback/onboarding/questions").json()
+        sports_q = next(q for q in questions if q["question_id"] == "onboard-sports")
+        prompt = sports_q["prompts"][0]["prompt"]
+        self.assertIn("sports/leagues", prompt.lower())
+        self.assertIn("confidently", prompt.lower())
+
+    def test_knowledge_areas_includes_ux(self) -> None:
+        res = self.client.get("/api/feedback/knowledge-areas")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("UX", res.json()["areas"])
+
+    def test_question_upsert_preserves_answers_and_completion(self) -> None:
+        create = self.client.post("/api/feedback/reviewers", json={"name": "Preserve User"})
+        rid = create.json()["reviewer_id"]
+        questions = self.client.get("/api/feedback/onboarding/questions").json()
+        answers = [{"question_id": q["question_id"], "answer": f"Saved: {q['title']}"} for q in questions]
+        self.client.post(
+            "/api/feedback/onboarding/answers",
+            json={"reviewer_id": rid, "answers": answers},
+        )
+        with self.engine.connect() as conn:
+            before_count = conn.execute(
+                text("SELECT COUNT(*) FROM analyst_answers WHERE reviewer_id = :rid"),
+                {"rid": rid},
+            ).scalar()
+            completed_before = conn.execute(
+                text("SELECT onboarding_completed_at FROM reviewers WHERE reviewer_id = :rid"),
+                {"rid": rid},
+            ).scalar()
+        init_platform(self.engine)
+        with self.engine.connect() as conn:
+            after_count = conn.execute(
+                text("SELECT COUNT(*) FROM analyst_answers WHERE reviewer_id = :rid"),
+                {"rid": rid},
+            ).scalar()
+            completed_after = conn.execute(
+                text("SELECT onboarding_completed_at FROM reviewers WHERE reviewer_id = :rid"),
+                {"rid": rid},
+            ).scalar()
+            title = conn.execute(
+                text("SELECT title FROM analyst_questions WHERE question_id = 'onboard-sports'")
+            ).scalar()
+        self.assertEqual(before_count, after_count)
+        self.assertEqual(completed_before, completed_after)
+        self.assertEqual(title, "Sports expertise")
+
+    def test_prediction_per_sport_limits(self) -> None:
+        res = self.client.get("/api/feedback/predictions")
+        self.assertEqual(res.status_code, 200)
+        preds = res.json()
+        by_sport: dict[str, int] = {}
+        for p in preds:
+            sport = p.get("sport_ui") or p.get("sport")
+            by_sport[sport] = by_sport.get(sport, 0) + 1
+        for sport, count in by_sport.items():
+            self.assertLessEqual(count, 6, msg=f"{sport} exceeded default limit")
+
+    def test_prediction_limit_env_override(self) -> None:
+        with patch.dict(os.environ, {"DASHBOARD_PRED_LIMIT_MLB": "2"}):
+            from backend.routes import feedback as fb
+
+            limits = fb._dashboard_pred_limits()
+            self.assertEqual(limits["MLB"], 2)
+
+    def test_prediction_priority_prefers_high_confidence(self) -> None:
+        import json
+
+        from backend.routes.feedback import _fetch_predictions_for_sport
+
+        ts = "2026-07-08T12:00:00"
+        low_snap = json.dumps({"explanations": []})
+        high_snap = json.dumps({
+            "explanations": [{"label": "ERA", "weight": 0.5, "value": "2.10"}],
+        })
+        with self.engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO predictions
+                        (sport, league, game_date, home_team, away_team, predicted_winner,
+                         confidence_level, prediction_status, feature_snapshot, created_at)
+                    VALUES
+                        ('MLB', 'AL', '2099-01-01', 'Low Team', 'Low Opp', 'Low Team',
+                         'LOW', 'UPCOMING', :low_snap, :ts),
+                        ('MLB', 'AL', '2099-01-02', 'High Team', 'High Opp', 'High Team',
+                         'HIGH', 'UPCOMING', :high_snap, :ts)
+                    """
+                ),
+                {"ts": ts, "low_snap": low_snap, "high_snap": high_snap},
+            )
+        with self._Session() as session:
+            rows = _fetch_predictions_for_sport(session, "MLB", 50)
+        teams = [r["home_team"] for r in rows if r["home_team"] in ("High Team", "Low Team")]
+        self.assertEqual(len(teams), 2)
+        self.assertEqual(teams[0], "High Team")
 
     def test_research_answers_submit_and_list(self) -> None:
         create = self.client.post("/api/feedback/reviewers", json={"name": "Research User"})

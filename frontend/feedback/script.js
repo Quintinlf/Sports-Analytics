@@ -38,6 +38,7 @@ function sanitizeHtml(html) {
     return DOMPurify.sanitize(html, {
       USE_PROFILES: { html: true, mathMl: true, svg: true },
       ADD_ATTR: ["class", "style"],
+      ADD_TAGS: ["semantics", "annotation", "annotation-xml"],
     });
   }
   return escapeHtml(html);
@@ -233,19 +234,28 @@ async function submitOnboarding() {
     answers.push({ question_id: q.question_id, answer });
   }
 
-  const res = await fetch(`${API}/api/feedback/onboarding/answers`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ reviewer_id: currentReviewer.reviewer_id, answers }),
-  });
-  if (!res.ok) {
-    toast("Could not save onboarding answers", "error");
-    return;
-  }
+  try {
+    const res = await fetch(`${API}/api/feedback/onboarding/answers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reviewer_id: currentReviewer.reviewer_id, answers }),
+    });
+    if (!res.ok) {
+      toast("Could not save onboarding answers", "error");
+      return;
+    }
 
+    document.getElementById("onboarding-modal").style.display = "none";
+    toast("Onboarding saved — thank you for training the model", "success");
+    refreshOnboardingAlert();
+  } catch {
+    toast("Network error — please retry", "error");
+  }
+}
+
+function skipOnboarding() {
   document.getElementById("onboarding-modal").style.display = "none";
-  toast("Onboarding saved — thank you for training the model", "success");
-  refreshOnboardingAlert();
+  toast("Onboarding skipped — you can complete it later from the alert banner", "info");
 }
 
 function applyReviewerSession(data, history, customSections) {
@@ -468,12 +478,20 @@ async function submitComment(targetType, targetId, inputId, containerId) {
   loadComments(targetType, targetId, containerId);
 }
 
+function resolveWhoWinsPick(pickEl) {
+  if (!pickEl || !currentPrediction) return null;
+  if (pickEl.value === "home") return currentPrediction.home_team;
+  if (pickEl.value === "away") return currentPrediction.away_team;
+  if (pickEl.value === "draw") return "Draw";
+  return null;
+}
+
 function updateDisagreeFields() {
   const pickEl = document.querySelector('input[name="who-wins"]:checked');
   const group = document.getElementById("primary-variable-group");
   if (!pickEl || !currentPrediction) { group.style.display = "none"; return; }
-  const pick = pickEl.value === "home" ? currentPrediction.home_team : currentPrediction.away_team;
-  const disagree = pick.toLowerCase() !== (currentPrediction.predicted_winner || "").toLowerCase();
+  const pick = resolveWhoWinsPick(pickEl);
+  const disagree = (pick || "").toLowerCase() !== (currentPrediction.predicted_winner || "").toLowerCase();
   group.style.display = disagree ? "block" : "none";
 }
 
@@ -484,15 +502,19 @@ async function handleReviewerLogin() {
   const name = document.getElementById("reviewer-name-input").value.trim();
   if (!name) { toast("Please enter your name", "error"); return; }
 
-  const res = await fetch(`${API}/api/feedback/reviewers`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
-  });
-  if (!res.ok) { toast("Could not load reviewer", "error"); return; }
+  try {
+    const res = await fetch(`${API}/api/feedback/reviewers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) { toast("Could not load reviewer", "error"); return; }
 
-  const data = await res.json();
-  applyReviewerSession(data, data.history, data.custom_sections);
+    const data = await res.json();
+    applyReviewerSession(data, data.history, data.custom_sections);
+  } catch {
+    toast("Network error — please retry", "error");
+  }
 }
 
 function renderCustomSections(sections) {
@@ -612,7 +634,18 @@ async function loadPredictions() {
   grid.appendChild(spinner);
 
   const query = selectedSport !== "ALL" ? `?sport=${encodeURIComponent(selectedSport)}` : "";
-  const res = await fetch(`${API}/api/feedback/predictions${query}`, { cache: "no-store" });
+  let res;
+  try {
+    res = await fetch(`${API}/api/feedback/predictions${query}`, { cache: "no-store" });
+  } catch {
+    clearChildren(grid);
+    const err = document.createElement("p");
+    err.style.color = "var(--red)";
+    err.textContent = "Network error — please retry.";
+    grid.appendChild(err);
+    toast("Network error — please retry", "error");
+    return;
+  }
   if (!res.ok) {
     clearChildren(grid);
     const err = document.createElement("p");
@@ -678,9 +711,14 @@ async function selectPrediction(id, tileEl) {
   document.querySelectorAll(".pred-tile").forEach(t => t.classList.remove("active"));
   tileEl.classList.add("active");
 
-  const res = await fetch(`${API}/api/feedback/predictions/${id}`);
-  if (!res.ok) { toast("Failed to load prediction", "error"); return; }
-  currentPrediction = await res.json();
+  try {
+    const res = await fetch(`${API}/api/feedback/predictions/${id}`);
+    if (!res.ok) { toast("Failed to load prediction", "error"); return; }
+    currentPrediction = await res.json();
+  } catch {
+    toast("Network error — please retry", "error");
+    return;
+  }
 
   renderAICard(currentPrediction);
   await loadMissingFactors(currentPrediction.sport_ui || currentPrediction.sport);
@@ -754,10 +792,19 @@ function renderAICard(pred) {
   document.getElementById("ai-away-initials").textContent = initials(pred.away_team);
   document.getElementById("ai-game-meta").textContent =
     `${sportUi} · ${pred.league || ""} · ${pred.game_date}`;
+  const provenanceEl = document.getElementById("ai-provenance-meta");
+  if (provenanceEl) {
+    const parts = [];
+    if (pred.model_name) parts.push(pred.model_name);
+    if (pred.data_source) parts.push(`source: ${pred.data_source}`);
+    if (pred.created_at) parts.push(`predicted ${pred.created_at}`);
+    provenanceEl.textContent = parts.join(" · ");
+  }
   const offseason = document.getElementById("offseason-banner");
-  if (pred.is_fallback && pred.offseason_notice) {
+  if (pred.is_fallback) {
     offseason.style.display = "block";
-    offseason.textContent = pred.offseason_notice;
+    offseason.textContent = pred.offseason_notice
+      || "Not a live model prediction — demo/fallback data.";
   } else {
     offseason.style.display = "none";
     offseason.textContent = "";
@@ -927,10 +974,15 @@ function showPregameSection() {
     r.onchange = updateDisagreeFields;
   });
 
-  // Update team labels in who-wins
+  // Update team labels in who-wins; show Draw only for soccer.
   if (currentPrediction) {
     document.getElementById("who-home-label").textContent = `🏠 ${currentPrediction.home_team}`;
     document.getElementById("who-away-label").textContent = `✈️ ${currentPrediction.away_team}`;
+    const sportUi = (currentPrediction.sport_ui || currentPrediction.sport || "").toUpperCase();
+    const drawWrap = document.getElementById("pick-draw-wrap");
+    if (drawWrap) {
+      drawWrap.style.display = (sportUi === "FIFA" || sportUi === "SOCCER") ? "" : "none";
+    }
   }
 }
 
@@ -945,8 +997,9 @@ async function submitPregame() {
   const betEl = document.querySelector('input[name="bet-size"]:checked');
   if (!betEl) { toast("Select bet size", "error"); return; }
 
-  const pick = pickEl.value === "home" ? currentPrediction.home_team : currentPrediction.away_team;
-  const agreeWithModel = pick.toLowerCase() === currentPrediction.predicted_winner.toLowerCase();
+  const pick = resolveWhoWinsPick(pickEl);
+  if (!pick) { toast("Pick a winner", "error"); return; }
+  const agreeWithModel = pick.toLowerCase() === (currentPrediction.predicted_winner || "").toLowerCase();
   lastPregamePick = pick;
   lastPregameAgreeWithModel = agreeWithModel;
   const missingFactors = [...document.querySelectorAll('input[name="missing_factor"]:checked')]
@@ -970,38 +1023,42 @@ async function submitPregame() {
     primary_decision_variable: agreeWithModel ? null : (document.getElementById("primary-decision-variable").value || null),
   };
 
-  const res = await fetch(`${API}/api/feedback/prediction-reviews`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  try {
+    const res = await fetch(`${API}/api/feedback/prediction-reviews`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
 
-  if (res.status === 409) {
-    toast("You already reviewed this prediction", "error");
-    // Still try to show postgame if settled
-    if (currentPrediction.settled) showPostgameSection(null);
-    return;
+    if (res.status === 409) {
+      toast("You already reviewed this prediction", "error");
+      // Still try to show postgame if settled
+      if (currentPrediction.settled) showPostgameSection(null);
+      return;
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      toast(err.detail || "Failed to submit review", "error");
+      return;
+    }
+
+    const data = await res.json();
+    currentReviewId = data.review_id;
+    toast("Pregame review saved ✓", "success");
+
+    document.getElementById("pregame-section").style.display = "none";
+
+    if (currentPrediction.settled) {
+      showPostgameSection(currentReviewId);
+    } else {
+      toast("Game hasn't settled yet — check back after the final score is in.", "info");
+    }
+
+    // Refresh stats
+    refreshReviewerStats();
+  } catch {
+    toast("Network error — please retry", "error");
   }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    toast(err.detail || "Failed to submit review", "error");
-    return;
-  }
-
-  const data = await res.json();
-  currentReviewId = data.review_id;
-  toast("Pregame review saved ✓", "success");
-
-  document.getElementById("pregame-section").style.display = "none";
-
-  if (currentPrediction.settled) {
-    showPostgameSection(currentReviewId);
-  } else {
-    toast("Game hasn't settled yet — check back after the final score is in.", "info");
-  }
-
-  // Refresh stats
-  refreshReviewerStats();
 }
 
 // ---------------------------------------------------------------------------
@@ -1099,43 +1156,47 @@ async function submitPostgame() {
     })(),
   };
 
-  const res = await fetch(`${API}/api/feedback/review-outcomes`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  try {
+    const res = await fetch(`${API}/api/feedback/review-outcomes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
 
-  if (res.status === 409) { toast("Outcome already submitted", "error"); return; }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    toast(err.detail || "Failed to submit outcome", "error");
-    return;
-  }
-
-  const data = await res.json();
-  toast("Postgame reflection saved ✓", "success");
-
-  // Update reviewer result
-  document.getElementById("reviewer-result-icon").textContent = data.reviewer_correct ? "✅" : "❌";
-  document.getElementById("reviewer-result-desc").textContent = data.reviewer_correct
-    ? "You called it right"
-    : "Wrong pick this time";
-
-  // Beat AI banner
-  if (data.reviewer_beat_model) {
-    document.getElementById("beat-ai-banner").style.display = "block";
-    if (document.getElementById("deep-analysis-fields").style.display === "none") {
-      document.getElementById("deep-analysis-fields").style.display = "block";
+    if (res.status === 409) { toast("Outcome already submitted", "error"); return; }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      toast(err.detail || "Failed to submit outcome", "error");
+      return;
     }
-  }
 
-  // Disable submit button
-  document.getElementById("postgame-submit-btn").disabled = true;
-  document.getElementById("postgame-submit-btn").textContent = "Submitted ✓";
+    const data = await res.json();
+    toast("Postgame reflection saved ✓", "success");
 
-  refreshReviewerStats();
-  if (data.reviewer_beat_model) {
-    refreshPendingCaseStudies();
+    // Update reviewer result
+    document.getElementById("reviewer-result-icon").textContent = data.reviewer_correct ? "✅" : "❌";
+    document.getElementById("reviewer-result-desc").textContent = data.reviewer_correct
+      ? "You called it right"
+      : "Wrong pick this time";
+
+    // Beat AI banner
+    if (data.reviewer_beat_model) {
+      document.getElementById("beat-ai-banner").style.display = "block";
+      if (document.getElementById("deep-analysis-fields").style.display === "none") {
+        document.getElementById("deep-analysis-fields").style.display = "block";
+      }
+    }
+
+    // Disable submit button
+    document.getElementById("postgame-submit-btn").disabled = true;
+    document.getElementById("postgame-submit-btn").textContent = "Submitted ✓";
+
+    refreshReviewerStats();
+    if (data.reviewer_beat_model) {
+      refreshPendingCaseStudies();
+    }
+  } catch {
+    toast("Network error — please retry", "error");
   }
 }
 
@@ -1168,16 +1229,23 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   if (urlReviewerId) {
     fetch(`${API}/api/feedback/reviewers/${encodeURIComponent(urlReviewerId)}/stats`)
-      .then(r => r.ok ? r.json() : null)
+      .then(r => {
+        if (!r.ok) throw new Error(`status ${r.status}`);
+        return r.json();
+      })
       .then(async data => {
-        if (!data) return;
+        if (!data) throw new Error("empty reviewer");
         const histRes = await fetch(`${API}/api/feedback/reviewers/${encodeURIComponent(urlReviewerId)}/history`);
         const history = histRes.ok ? await histRes.json() : [];
         const sectRes = await fetch(`${API}/api/feedback/reviewers/${encodeURIComponent(urlReviewerId)}/custom-sections`);
         const sections = sectRes.ok ? await sectRes.json() : [];
         applyReviewerSession(data, history, sections);
       })
-      .catch(() => {});
+      .catch(() => {
+        toast("Could not auto-login from link — please enter your name", "error");
+        document.getElementById("reviewer-login").style.display = "block";
+        document.getElementById("reviewer-panel").style.display = "none";
+      });
   }
 
   document.getElementById("login-btn").addEventListener("click", handleReviewerLogin);
@@ -1186,6 +1254,8 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.getElementById("onboarding-submit-btn").addEventListener("click", submitOnboarding);
+  const skipBtn = document.getElementById("onboarding-skip-btn");
+  if (skipBtn) skipBtn.addEventListener("click", skipOnboarding);
   document.getElementById("onboarding-alert").addEventListener("click", maybeShowOnboarding);
   document.getElementById("research-submit-btn").addEventListener("click", submitResearchAnswer);
   document.getElementById("research-comment-btn").addEventListener("click", () => {

@@ -39,6 +39,7 @@ from scripts.db_utils import (
     _ensure_reviewer_profile_columns,
     _backfill_reviewer_names,
 )
+from data.demo_data import demo_predictions_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -76,12 +77,29 @@ PRIMARY_DECISION_VARIABLES = [
     "home_field", "recent_form", "travel", "coaching", "other",
 ]
 
+KNOWLEDGE_AREAS = [
+    "Analyst Profile",
+    "Statistics",
+    "Game Theory",
+    "UX",  # Future: e.g. "What information would make you trust or distrust this prediction?"
+    "MLB",
+    "NBA",
+    "FIFA",
+    "Bullpens",
+]
+
 ONBOARDING_QUESTIONS: List[Dict[str, Any]] = [
     {
         "question_id": "onboard-eval-games",
         "title": "How you evaluate games",
         "body_markdown": "This helps the platform understand your analyst style.",
-        "prompts_json": json.dumps(["How do you normally evaluate games?"]),
+        "prompts_json": json.dumps([
+            {
+                "prompt": "How do you normally evaluate games?",
+                "placeholder": "e.g. I start with recent form and injuries, then compare my read to the model.",
+                "example": "Mention what you check first, what you weigh most, and when you disagree with the AI.",
+            }
+        ]),
         "knowledge_area": "Analyst Profile",
         "sort_order": 1,
     },
@@ -89,7 +107,13 @@ ONBOARDING_QUESTIONS: List[Dict[str, Any]] = [
         "question_id": "onboard-trust-stats",
         "title": "Statistics you trust",
         "body_markdown": "Tell us which metrics you rely on when challenging the model.",
-        "prompts_json": json.dumps(["What statistics do you trust?"]),
+        "prompts_json": json.dumps([
+            {
+                "prompt": "What statistics do you trust?",
+                "placeholder": "e.g. ELO, run differential, rest days, xG, defensive rating — and which you ignore.",
+                "example": "Separate stats you use for pregame picks vs. postgame reflection.",
+            }
+        ]),
         "knowledge_area": "Statistics",
         "sort_order": 2,
     },
@@ -97,7 +121,13 @@ ONBOARDING_QUESTIONS: List[Dict[str, Any]] = [
         "question_id": "onboard-sports",
         "title": "Sports expertise",
         "body_markdown": "Your sport focus helps route the right predictions to you.",
-        "prompts_json": json.dumps(["What sports do you know best?"]),
+        "prompts_json": json.dumps([
+            {
+                "prompt": "Which sports/leagues can you analyze confidently?",
+                "placeholder": "e.g. MLB deeply (AL/NL), NBA casually, FIFA — Premier League and Champions League.",
+                "example": "Note depth vs. casual watching; league-level detail helps us route the right games.",
+            }
+        ]),
         "knowledge_area": "Analyst Profile",
         "sort_order": 3,
     },
@@ -105,7 +135,13 @@ ONBOARDING_QUESTIONS: List[Dict[str, Any]] = [
         "question_id": "onboard-risk",
         "title": "Risk tolerance",
         "body_markdown": "Understanding your risk profile improves training data quality.",
-        "prompts_json": json.dumps(["How much risk do you typically take?"]),
+        "prompts_json": json.dumps([
+            {
+                "prompt": "How much risk do you typically take?",
+                "placeholder": "e.g. I avoid heavy underdogs unless there is a clear injury or matchup edge.",
+                "example": "Describe when you would bet vs. pass, and how that differs from the model's picks.",
+            }
+        ]),
         "knowledge_area": "Analyst Profile",
         "sort_order": 4,
     },
@@ -114,18 +150,24 @@ ONBOARDING_QUESTIONS: List[Dict[str, Any]] = [
 RESEARCH_SEED_QUESTIONS: List[Dict[str, Any]] = [
     {
         "question_id": "research-nash-equilibrium",
-        "title": "Can Nash equilibrium improve sports prediction?",
+        "title": "Can modeling opponents' decisions improve sports prediction?",
         "body_markdown": (
+            "A Nash equilibrium describes a situation where no participant can improve "
+            "their outcome by changing their strategy alone.\n\n"
+            "In sports:\n"
+            "- A team chooses a strategy.\n"
+            "- Opponents react.\n"
+            "- Coaches, players, and managers adjust.\n\n"
+            "Could modeling these interactions improve predictions?\n\n"
             "The equilibrium condition is:\n\n"
             "$$u_i(s_i^*, s_{-i}^*) \\ge u_i(s_i, s_{-i})$$\n\n"
             "**Variables:**\n"
             "- $u_i$: payoff\n"
             "- $s_i$: strategy\n"
-            "- $s_{-i}$: opponents' strategies\n\n"
-            "Think about how game theory could improve prediction models."
+            "- $s_{-i}$: opponents' strategies"
         ),
         "prompts_json": json.dumps([
-            "How would you model this in baseball?",
+            "How would you apply this across MLB, NBA, and FIFA?",
             "Which variables already exist in our data?",
             "Which variables are missing?",
             "Where could we collect them?",
@@ -446,12 +488,30 @@ def _profile_from_row(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _normalize_prompts(raw: Any) -> List[Dict[str, Any]]:
+    """Normalize prompts_json to structured objects for the frontend."""
+    if not isinstance(raw, list):
+        return []
+    normalized: List[Dict[str, Any]] = []
+    for item in raw:
+        if isinstance(item, str):
+            normalized.append({"prompt": item, "placeholder": None, "example": None})
+        elif isinstance(item, dict):
+            normalized.append({
+                "prompt": str(item.get("prompt") or ""),
+                "placeholder": item.get("placeholder"),
+                "example": item.get("example"),
+            })
+    return normalized
+
+
 def _question_row_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
     d = dict(row)
     try:
-        d["prompts"] = json.loads(d.pop("prompts_json", None) or "[]")
+        raw_prompts = json.loads(d.pop("prompts_json", None) or "[]")
     except json.JSONDecodeError:
-        d["prompts"] = []
+        raw_prompts = []
+    d["prompts"] = _normalize_prompts(raw_prompts)
     return d
 
 
@@ -485,6 +545,7 @@ def _migrate_platform_columns(db_engine) -> None:
 
 
 def _upsert_question(conn, question: Dict[str, Any], context: str, ts: str) -> None:
+    """Upsert question metadata only — never touches analyst_answers or onboarding_completed_at."""
     conn.execute(
         text(
             """
@@ -524,13 +585,9 @@ def _seed_onboarding_questions(db_engine) -> None:
 
 
 def _seed_research_questions(db_engine) -> None:
+    """Refresh research question copy on deploy; metadata only, answers preserved."""
+    ts = datetime.utcnow().isoformat()
     with db_engine.begin() as conn:
-        count = conn.execute(
-            text("SELECT COUNT(*) FROM analyst_questions WHERE context = 'research'")
-        ).scalar() or 0
-        if count > 0:
-            return
-        ts = datetime.utcnow().isoformat()
         for question in RESEARCH_SEED_QUESTIONS:
             _upsert_question(conn, question, "research", ts)
 
@@ -566,12 +623,18 @@ def init_platform(db_engine) -> None:
             if ddl[0] not in outcome_cols:
                 conn.execute(text(f"ALTER TABLE review_outcomes ADD COLUMN {ddl[0]} {ddl[1]}"))
 
-    # Seed demo predictions when the table is empty (live ingest runs via cron/Actions)
+    # Demo predictions are dev-only: gated behind ENABLE_DEMO_PREDICTIONS so a
+    # production deploy never has synthetic Yankees/Lakers/Man City rows
+    # mixed into the real predictions table it serves to the dashboard.
+    if not demo_predictions_enabled():
+        logger.info("ENABLE_DEMO_PREDICTIONS not set — skipping demo prediction seed.")
+        return
+
     with db_engine.connect() as conn:
         count = conn.execute(text("SELECT COUNT(*) FROM predictions")).scalar()
 
     if count == 0:
-        logger.info("Predictions table empty — seeding demo data.")
+        logger.info("Predictions table empty — seeding demo data (ENABLE_DEMO_PREDICTIONS=true).")
         for row in SEED_PREDICTIONS:
             try:
                 insert_prediction(db_engine, row)
@@ -938,58 +1001,146 @@ def get_leagues(sport: str) -> Dict[str, Any]:
     return {"sport": sport_ui, "leagues": LEAGUES.get(sport_ui, [])}
 
 
-_FIFA_PREDICTIONS_SQL = """
+_FIFA_PREDICTIONS_BASE_SQL = """
     SELECT prediction_id, sport, league, game_date, home_team, away_team,
            predicted_winner, confidence_level, actual_home_score, actual_away_score,
-           actual_winner, correct, prediction_status
+           actual_winner, correct, prediction_status, feature_snapshot,
+           model_name, created_at, data_source, is_fallback
     FROM predictions
     WHERE sport IN ('SOCCER', 'FIFA')
-    ORDER BY
-        CASE WHEN LOWER(COALESCE(league, '')) LIKE '%world cup%' THEN 0 ELSE 1 END,
-        game_date ASC,
-        prediction_id DESC
+"""
+
+_PREDICTION_SELECT_COLS = """
+    prediction_id, sport, league, game_date, home_team, away_team,
+    predicted_winner, confidence_level, actual_home_score, actual_away_score,
+    actual_winner, correct, prediction_status, feature_snapshot,
+    model_name, created_at, data_source, is_fallback
 """
 
 
+def _dashboard_pred_limits() -> Dict[str, int]:
+    """Per-sport dashboard limits (env overrides)."""
+    defaults = {"MLB": 6, "NBA": 6, "FIFA": 6}
+    for key, default in defaults.items():
+        raw = os.getenv(f"DASHBOARD_PRED_LIMIT_{key}", "").strip()
+        if raw.isdigit():
+            defaults[key] = max(1, int(raw))
+    return defaults
+
+
+def _prediction_priority_order_sql() -> str:
+    """ORDER BY clause: confidence, data richness, upcoming — extensible for priority_score column."""
+    conf_rank = """
+        CASE UPPER(COALESCE(confidence_level, 'LOW'))
+            WHEN 'HIGH' THEN 3
+            WHEN 'MEDIUM' THEN 2
+            ELSE 1
+        END
+    """
+    upcoming_rank = """
+        CASE
+            WHEN COALESCE(prediction_status, '') = 'UPCOMING' THEN 1
+            WHEN actual_winner IS NULL THEN 1
+            ELSE 0
+        END
+    """
+    data_rank = """
+        CASE
+            WHEN feature_snapshot IS NOT NULL
+             AND LENGTH(TRIM(feature_snapshot)) > 80
+            THEN 1
+            ELSE 0
+        END
+    """
+    # Weighted score until a dedicated priority_score column exists
+    return f"""
+        ({conf_rank}) * 10 + ({data_rank}) * 5 + ({upcoming_rank}) * 3 DESC,
+        game_date DESC,
+        prediction_id DESC
+    """
+
+
+def _fetch_predictions_for_sport(
+    session,
+    db_sport: str,
+    limit: int,
+) -> List[Dict[str, Any]]:
+    order = _prediction_priority_order_sql()
+    if db_sport == "SOCCER":
+        sql = f"{_FIFA_PREDICTIONS_BASE_SQL} ORDER BY {order} LIMIT :limit"
+        rows = session.execute(text(sql), {"limit": limit}).mappings().all()
+    else:
+        sql = f"""
+            SELECT {_PREDICTION_SELECT_COLS}
+            FROM predictions
+            WHERE sport = :s
+              AND predicted_winner IS NOT NULL
+            ORDER BY {order}
+            LIMIT :limit
+        """
+        rows = session.execute(text(sql), {"s": db_sport, "limit": limit}).mappings().all()
+    return [dict(r) for r in rows]
+
+
+def _serialize_prediction_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    d = dict(row)
+    snap = _parse_snapshot(d.pop("feature_snapshot", None))
+    d["sport_ui"] = _ui_sport(d["sport"])
+    d["settled"] = d.get("actual_home_score") is not None
+    if d.get("game_date") is not None:
+        d["game_date"] = str(d["game_date"])
+    if d.get("created_at") is not None:
+        d["created_at"] = str(d["created_at"])
+    # Prefer first-class columns; fall back to snapshot for older rows.
+    if d.get("data_source") is None and isinstance(snap, dict):
+        d["data_source"] = snap.get("data_source")
+    if d.get("is_fallback") is None and isinstance(snap, dict):
+        d["is_fallback"] = bool(snap.get("is_fallback"))
+    else:
+        d["is_fallback"] = bool(d.get("is_fallback"))
+    return d
+
+
+@router.get("/knowledge-areas")
+def list_knowledge_areas() -> Dict[str, Any]:
+    return {"areas": KNOWLEDGE_AREAS}
+
+
 @router.get("/predictions")
-def list_predictions(sport: Optional[str] = None) -> JSONResponse:
-    db_sport = _db_sport(sport) if sport else None
+def list_predictions(
+    sport: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> JSONResponse:
+    limits = _dashboard_pred_limits()
+    db_sport = _db_sport(sport) if sport and sport.upper() != "ALL" else None
+    sport_ui = (sport or "").upper()
+
     with get_db_session() as session:
-        if db_sport == "SOCCER":
-            rows = session.execute(text(_FIFA_PREDICTIONS_SQL)).mappings().all()
-        elif db_sport:
-            rows = session.execute(
-                text("SELECT prediction_id, sport, league, game_date, home_team, away_team, "
-                     "predicted_winner, confidence_level, actual_home_score, actual_away_score, "
-                     "actual_winner, correct, prediction_status FROM predictions WHERE sport = :s "
-                     "ORDER BY game_date DESC"),
-                {"s": db_sport},
-            ).mappings().all()
+        if db_sport:
+            cap = limit if limit and limit > 0 else limits.get(sport_ui, limits.get(_ui_sport(db_sport), 6))
+            rows = _fetch_predictions_for_sport(session, db_sport, cap)
         else:
-            rows = session.execute(
-                text("SELECT prediction_id, sport, league, game_date, home_team, away_team, "
-                     "predicted_winner, confidence_level, actual_home_score, actual_away_score, "
-                     "actual_winner, correct, prediction_status FROM predictions "
-                     "WHERE sport IS NOT NULL AND predicted_winner IS NOT NULL "
-                     "ORDER BY game_date DESC"),
-            ).mappings().all()
-    result = []
-    for r in rows:
-        d = dict(r)
-        d["sport_ui"] = _ui_sport(d["sport"])
-        d["settled"] = d["actual_home_score"] is not None
-        if d.get("game_date") is not None:
-            d["game_date"] = str(d["game_date"])
-        result.append(d)
+            rows = []
+            for ui_key, db_key in [("MLB", "MLB"), ("NBA", "NBA"), ("FIFA", "SOCCER")]:
+                cap = limit if limit and limit > 0 else limits[ui_key]
+                rows.extend(_fetch_predictions_for_sport(session, db_key, cap))
+
+    result = [_serialize_prediction_row(r) for r in rows]
     return JSONResponse(content=result, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/debug/predictions")
-def debug_predictions() -> Dict[str, Any]:
-    """Return diagnostic counts and latest prediction rows by sport/status."""
+def debug_predictions(
+    x_admin_key: Optional[str] = Header(None, alias="X-Admin-Key"),
+) -> Dict[str, Any]:
+    """Return diagnostic counts, latest predictions, and recent pipeline runs."""
+    _require_admin(x_admin_key)
     with get_db_session() as session:
         cols = [c["name"] for c in sa_inspect(engine).get_columns("predictions")]
         has_prediction_status = "prediction_status" in cols
+        has_model_name = "model_name" in cols
+        has_data_source = "data_source" in cols
+        has_is_fallback = "is_fallback" in cols
 
         rows = session.execute(
             text("SELECT sport, COUNT(*) AS cnt FROM predictions GROUP BY sport ORDER BY sport")
@@ -1037,17 +1188,27 @@ def debug_predictions() -> Dict[str, Any]:
             elif status == "FINAL":
                 final_counts[sport] = cnt
 
+        select_cols = [
+            "prediction_id", "sport", "league", "game_date", "home_team", "away_team",
+            "predicted_winner", "confidence_level", "actual_home_score", "actual_away_score",
+            "actual_winner", "correct",
+            """COALESCE(
+                   prediction_status,
+                   CASE WHEN actual_winner IS NOT NULL THEN 'FINAL' ELSE 'UPCOMING' END
+               ) AS prediction_status""",
+            "created_at",
+        ]
+        if has_model_name:
+            select_cols.append("model_name")
+        if has_data_source:
+            select_cols.append("data_source")
+        if has_is_fallback:
+            select_cols.append("is_fallback")
+
         latest = session.execute(
             text(
-                """
-                SELECT prediction_id, sport, league, game_date, home_team, away_team,
-                       predicted_winner, confidence_level, actual_home_score, actual_away_score,
-                       actual_winner, correct,
-                       COALESCE(
-                           prediction_status,
-                           CASE WHEN actual_winner IS NOT NULL THEN 'FINAL' ELSE 'UPCOMING' END
-                       ) AS prediction_status,
-                       created_at
+                f"""
+                SELECT {", ".join(select_cols)}
                 FROM predictions
                 ORDER BY prediction_id DESC
                 LIMIT 25
@@ -1055,10 +1216,33 @@ def debug_predictions() -> Dict[str, Any]:
             )
         ).mappings().all()
 
+        pipeline_runs: List[Dict[str, Any]] = []
+        try:
+            run_tables = sa_inspect(engine).get_table_names()
+            if "pipeline_run_log" in run_tables:
+                pipeline_runs = [
+                    dict(r)
+                    for r in session.execute(
+                        text(
+                            """
+                            SELECT run_id, sport, status, error_message,
+                                   predictions_count, run_at
+                            FROM pipeline_run_log
+                            ORDER BY run_id DESC
+                            LIMIT 30
+                            """
+                        )
+                    ).mappings().all()
+                ]
+        except Exception:
+            pipeline_runs = []
+
     latest_predictions = []
     for row in latest:
         d = dict(row)
         d["sport_ui"] = _ui_sport(d.get("sport"))
+        if d.get("is_fallback") is not None:
+            d["is_fallback"] = bool(d["is_fallback"])
         latest_predictions.append(d)
 
     return {
@@ -1066,6 +1250,7 @@ def debug_predictions() -> Dict[str, Any]:
         "latest_predictions": latest_predictions,
         "upcoming_counts": upcoming_counts,
         "final_counts": final_counts,
+        "pipeline_runs": pipeline_runs,
     }
 
 
@@ -1096,8 +1281,15 @@ def get_prediction(prediction_id: int) -> Dict[str, Any]:
     d["bullpen"] = snap.get("bullpen") if isinstance(snap, dict) else None
     d["lineups"] = snap.get("lineups") if isinstance(snap, dict) else None
     d["missing_data_warnings"] = snap.get("missing_data_warnings", []) if isinstance(snap, dict) else []
-    d["data_source"] = snap.get("data_source") if isinstance(snap, dict) else None
-    d["is_fallback"] = bool(snap.get("is_fallback")) if isinstance(snap, dict) else False
+    # Prefer first-class provenance columns; fall back to snapshot for older rows.
+    col_source = d.get("data_source")
+    d["data_source"] = col_source if col_source is not None else (
+        snap.get("data_source") if isinstance(snap, dict) else None
+    )
+    if d.get("is_fallback") is not None:
+        d["is_fallback"] = bool(d.get("is_fallback"))
+    else:
+        d["is_fallback"] = bool(snap.get("is_fallback")) if isinstance(snap, dict) else False
     d["offseason_notice"] = (d["metrics"] or {}).get("offseason_notice")
     d["experimental_betting"] = {
         "predicted_winner": d.get("predicted_winner"),

@@ -41,7 +41,7 @@ class TestSportConfig(unittest.TestCase):
 
     def test_model_types_are_strings(self) -> None:
         self.assertEqual(get_model_type("NBA"), "ensemble")
-        self.assertEqual(get_model_type("MLB"), "elo_xgboost")
+        self.assertEqual(get_model_type("MLB"), "lightgbm")
         self.assertEqual(get_model_type("SOCCER"), "xgboost_multiclass")
 
     def test_email_labels(self) -> None:

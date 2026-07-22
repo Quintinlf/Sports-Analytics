@@ -120,6 +120,7 @@
         </div>
 
         <div class="game-meta" id="ai-game-meta"></div>
+        <div class="game-meta provenance-meta" id="ai-provenance-meta"></div>
         <div class="offseason-banner" id="offseason-banner"></div>
         <div id="mlb-context-block" class="mlb-context-block" style="display:none"></div>
         <div id="missing-data-warnings" class="missing-warnings" style="display:none"></div>
@@ -195,6 +196,10 @@
             <div class="radio-btn">
               <input type="radio" id="pick-away" name="who-wins" value="away" />
               <label for="pick-away" id="who-away-label">✈️ Away</label>
+            </div>
+            <div class="radio-btn" id="pick-draw-wrap" style="display:none">
+              <input type="radio" id="pick-draw" name="who-wins" value="draw" />
+              <label for="pick-draw" id="who-draw-label">🤝 Draw</label>
             </div>
           </div>
         </div>
@@ -386,6 +391,7 @@
     </p>
     <div id="onboarding-questions"></div>
     <div class="onboarding-actions">
+      <button class="btn btn-secondary" id="onboarding-skip-btn" type="button">Skip for now</button>
       <button class="btn btn-primary" id="onboarding-submit-btn">Save &amp; Continue</button>
     </div>
   </div>

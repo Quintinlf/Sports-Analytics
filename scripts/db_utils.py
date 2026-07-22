@@ -36,7 +36,9 @@ CREATE TABLE IF NOT EXISTS predictions (
     actual_away_score INTEGER,
     actual_winner TEXT,
     correct INTEGER,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    data_source TEXT,
+    is_fallback INTEGER
 );
 """
 
@@ -76,7 +78,9 @@ CREATE TABLE IF NOT EXISTS predictions (
     actual_away_score INTEGER,
     actual_winner TEXT,
     correct INTEGER,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    data_source TEXT,
+    is_fallback BOOLEAN
 );
 """
 
@@ -108,6 +112,8 @@ UNIFIED_PREDICTION_COLUMNS = [
     ("actual_winner", "TEXT"),
     ("correct", "INTEGER"),
     ("created_at", "TEXT"),
+    ("data_source", "TEXT"),
+    ("is_fallback", "INTEGER"),
 ]
 
 
@@ -281,6 +287,26 @@ def _serialize_feature_snapshot(value: Any) -> Optional[str]:
     if isinstance(value, str):
         return value
     return json.dumps(value)
+
+
+def _provenance_from_prediction(prediction_data: Dict[str, Any], feature_snapshot: Optional[str]) -> tuple[Optional[str], int]:
+    """Resolve data_source / is_fallback from top-level keys or feature_snapshot JSON."""
+    data_source = prediction_data.get("data_source")
+    is_fallback = prediction_data.get("is_fallback")
+    if data_source is None or is_fallback is None:
+        snap: Dict[str, Any] = {}
+        if feature_snapshot:
+            try:
+                parsed = json.loads(feature_snapshot) if isinstance(feature_snapshot, str) else feature_snapshot
+                if isinstance(parsed, dict):
+                    snap = parsed
+            except (TypeError, json.JSONDecodeError):
+                snap = {}
+        if data_source is None:
+            data_source = snap.get("data_source")
+        if is_fallback is None:
+            is_fallback = snap.get("is_fallback")
+    return (str(data_source) if data_source is not None else None, 1 if bool(is_fallback) else 0)
 
 
 def _compute_game_signature(prediction_data: Dict[str, Any]) -> str:
@@ -647,7 +673,15 @@ def ensure_default_reviewers(engine: Engine) -> None:
             )
 
         _backfill_reviewer_names(conn)
-        _seed_trusted_analysts(conn, engine, ts)
+        # Demo/trusted seed identities (Lamar, Melissa, Alex, …) collide with
+        # real analysts typing those names at login. Only seed when demo mode
+        # is explicitly enabled.
+        try:
+            from data.demo_data import demo_predictions_enabled
+        except ImportError:
+            demo_predictions_enabled = lambda: False  # type: ignore
+        if demo_predictions_enabled():
+            _seed_trusted_analysts(conn, engine, ts)
 
     logger.info("Default reviewer seed ensured (reviewer_id=%s)", reviewer_id)
 
@@ -660,6 +694,7 @@ def insert_prediction(engine: Engine, prediction_data: Dict[str, Any]) -> int:
     feature_snapshot = _serialize_feature_snapshot(prediction_data.get("feature_snapshot"))
     provider_game_id = prediction_data.get("provider_game_id")
     game_signature = prediction_data.get("game_signature") or _compute_game_signature(prediction_data)
+    data_source, is_fallback = _provenance_from_prediction(prediction_data, feature_snapshot)
 
     is_legacy = _predictions_is_legacy(engine)
 
@@ -706,17 +741,19 @@ def insert_prediction(engine: Engine, prediction_data: Dict[str, Any]) -> int:
             # Optional columns added via schema migration.
             optional_cols = []
             optional_vals = []
-            for col_name, param_name in [
-                ("bet_type", "bet_type"),
-                ("bet_units", "bet_units"),
-                ("bet_recommendation", "bet_recommendation"),
-                ("model_name", "model_name"),
-                ("prediction_status", "prediction_status"),
+            for col_name, param_name, value in [
+                ("bet_type", "bet_type", prediction_data.get("bet_type")),
+                ("bet_units", "bet_units", prediction_data.get("bet_units")),
+                ("bet_recommendation", "bet_recommendation", prediction_data.get("bet_recommendation")),
+                ("model_name", "model_name", prediction_data.get("model_name")),
+                ("prediction_status", "prediction_status", prediction_data.get("prediction_status")),
+                ("data_source", "data_source", data_source),
+                ("is_fallback", "is_fallback", is_fallback),
             ]:
                 if _column_exists(engine, "predictions", col_name):
                     optional_cols.append(col_name)
                     optional_vals.append(f":{param_name}")
-                    params[param_name] = prediction_data.get(param_name)
+                    params[param_name] = value
 
             if optional_cols:
                 sql = sql.replace(
@@ -749,6 +786,8 @@ def insert_prediction(engine: Engine, prediction_data: Dict[str, Any]) -> int:
                 "actual_winner": prediction_data.get("actual_winner"),
                 "correct": prediction_data.get("correct"),
                 "created_at": created_at,
+                "data_source": data_source,
+                "is_fallback": is_fallback,
             }
             existing = None
             if provider_game_id:
@@ -793,7 +832,9 @@ def insert_prediction(engine: Engine, prediction_data: Dict[str, Any]) -> int:
                             actual_home_score = :actual_home_score,
                             actual_away_score = :actual_away_score,
                             actual_winner = :actual_winner,
-                            correct = :correct
+                            correct = :correct,
+                            data_source = :data_source,
+                            is_fallback = :is_fallback
                         WHERE prediction_id = :prediction_id
                         """
                     ),
@@ -808,14 +849,14 @@ def insert_prediction(engine: Engine, prediction_data: Dict[str, Any]) -> int:
                     bet_type, bet_units, bet_recommendation,
                     feature_snapshot, model_name, prediction_status,
                     actual_home_score, actual_away_score, actual_winner, correct,
-                    created_at
+                    created_at, data_source, is_fallback
                 ) VALUES (
                     :provider_game_id, :game_signature, :sport, :league, :game_date, :home_team, :away_team,
                     :predicted_winner, :win_probability, :confidence_level,
                     :bet_type, :bet_units, :bet_recommendation,
                     :feature_snapshot, :model_name, :prediction_status,
                     :actual_home_score, :actual_away_score, :actual_winner, :correct,
-                    :created_at
+                    :created_at, :data_source, :is_fallback
                 )
             """
             if _is_postgresql(engine):
