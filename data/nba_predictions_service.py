@@ -13,7 +13,7 @@ from nba_api.stats.endpoints import leaguegamefinder
 
 from data.nba_loader import fetch_upcoming_games as fetch_nba_raw_games
 from data.nba_live_features import build_nba_live_features
-from data.explanation_engine import build_snapshot
+from data.explanation_engine import build_snapshot, explain_nba_prediction
 from data.prediction_errors import ModelUnavailableError
 
 logger = logging.getLogger(__name__)
@@ -268,7 +268,6 @@ class NBALivePredictionService:
         confidence_level = result["confidence"]
 
         contributions = result.get("model_contributions", {})
-        explanations = []
         metrics: Dict[str, Any] = {
             "spread": result.get("spread"),
             "q10": result.get("q10"),
@@ -276,29 +275,33 @@ class NBALivePredictionService:
             "uncertainty": result.get("uncertainty"),
             "win_prob_raw": result.get("win_prob"),
         }
-        label_map = {
-            "gp": "Gaussian Process (spread)",
-            "lgbm_win": "LightGBM Win Model",
-            "lgbm_quantile": "LightGBM Quantile Spread",
-            "elo": "Elo Rating",
-        }
         for key, contrib in contributions.items():
-            weight = _to_native_float(contrib.get("weight", 0.0))
             contrib_win_prob = _to_native_float(contrib.get("win_prob", 0.5))
-            explanations.append({
-                "label": label_map.get(key, key),
-                "weight": round(weight, 4),
-                "value": f"{contrib_win_prob:.1%} home win",
-            })
             metrics[f"{key}_win_prob"] = round(contrib_win_prob, 4)
+
+        explanation = explain_nba_prediction(
+            features=features_df,
+            predicted_winner=predicted_winner,
+            home_team=home_team,
+            away_team=away_team,
+            win_probability=win_prob,
+            confidence_level=confidence_level,
+        )
+        # Keep ensemble blend weights in metrics for debugging; UI uses why_factors.
+        metrics["ensemble_weights"] = {
+            key: _to_native_float(contrib.get("weight", 0.0))
+            for key, contrib in contributions.items()
+        }
 
         feature_snapshot = build_snapshot(
             sport="NBA",
             data_source="nba_api",
             is_fallback=False,
             confidence_score=win_prob,
-            explanations=explanations,
+            explanations=explanation["explanations"],
             metrics=metrics,
+            why_factors=explanation["why_factors"],
+            risk_factors=explanation["risk_factors"],
         )
 
         return {

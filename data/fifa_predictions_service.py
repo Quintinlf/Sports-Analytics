@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from data.nba_predictions_service import OffSeasonStrategy
-from data.explanation_engine import build_snapshot
+from data.explanation_engine import build_snapshot, explain_fifa_prediction
 from data.demo_data import demo_predictions_enabled
 from data.prediction_errors import ModelUnavailableError
 
@@ -182,24 +182,33 @@ class FIFALivePredictionService:
                     "DRAW": "Draw",
                 }[top_outcome]
                 confidence_level = _confidence_label(top_prob)
-                explanations = [
-                    {"label": "Home Win Probability", "weight": 1.0, "value": f"{proba['HOME_WIN']:.1%}"},
-                    {"label": "Draw Probability", "weight": 1.0, "value": f"{proba['DRAW']:.1%}"},
-                    {"label": "Away Win Probability", "weight": 1.0, "value": f"{proba['AWAY_WIN']:.1%}"},
-                ]
                 metrics = {
                     "model_home_win_probability": round(proba["HOME_WIN"], 4),
                     "model_draw_probability": round(proba["DRAW"], 4),
                     "model_away_win_probability": round(proba["AWAY_WIN"], 4),
                 }
+                squad_maps = model.squad_metric_maps(squad_profiles, home_team, away_team)
+                home_metrics, away_metrics = squad_maps if squad_maps else ({}, {})
+                explanation = explain_fifa_prediction(
+                    home_metrics=home_metrics,
+                    away_metrics=away_metrics,
+                    predicted_winner=predicted_winner,
+                    home_team=home_team,
+                    away_team=away_team,
+                    win_probability=top_prob,
+                    confidence_level=confidence_level,
+                    outcome_probabilities=proba,
+                )
 
                 feature_snapshot = build_snapshot(
                     sport="FIFA",
                     data_source="thesportsdb",
                     is_fallback=False,
                     confidence_score=top_prob,
-                    explanations=explanations,
+                    explanations=explanation["explanations"],
                     metrics=metrics,
+                    why_factors=explanation["why_factors"],
+                    risk_factors=explanation["risk_factors"],
                 )
 
                 row = {

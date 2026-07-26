@@ -869,8 +869,19 @@ def _confidence_pct(snap: Dict[str, Any], conf_level: str) -> float:
 
 
 def _explanations(snap: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Return [{label, weight}] explanations, normalized to 0–1."""
-    if "explanations" in snap:
+    """Return [{label, weight, value}] for UI — prefer why_factors when present."""
+    why = snap.get("why_factors") if isinstance(snap, dict) else None
+    if isinstance(why, list) and why:
+        return [
+            {
+                "label": f.get("label", "Factor"),
+                "weight": float(f.get("strength", 0.0) or 0.0),
+                "value": f.get("detail") or f.get("label"),
+            }
+            for f in why
+            if isinstance(f, dict)
+        ]
+    if isinstance(snap, dict) and "explanations" in snap:
         return snap["explanations"]
     # Flat numeric dict fallback
     numeric = {k: v for k, v in snap.items()
@@ -880,6 +891,33 @@ def _explanations(snap: Dict[str, Any]) -> List[Dict[str, Any]]:
         return [{"label": k.replace("_", " ").title(), "weight": round(v / max_v, 3)}
                 for k, v in sorted(numeric.items(), key=lambda x: -x[1])]
     return []
+
+
+def _why_factors(snap: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if not isinstance(snap, dict):
+        return []
+    why = snap.get("why_factors")
+    if isinstance(why, list) and why:
+        return why
+    # Synthesize from legacy explanations for older rows
+    return [
+        {
+            "label": e.get("label", "Factor"),
+            "detail": e.get("value") or e.get("label"),
+            "side": "neutral",
+            "strength": float(e.get("weight", 0.0) or 0.0),
+            "source_feature": None,
+        }
+        for e in _explanations(snap)
+        if isinstance(e, dict)
+    ]
+
+
+def _risk_factors(snap: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if not isinstance(snap, dict):
+        return []
+    risks = snap.get("risk_factors")
+    return risks if isinstance(risks, list) else []
 
 
 def _reviewer_stats(session, reviewer_id: str) -> Dict[str, Any]:
@@ -1373,6 +1411,8 @@ def get_prediction(prediction_id: int) -> Dict[str, Any]:
     d["settled"] = d["actual_home_score"] is not None
     d["confidence_pct"] = _confidence_pct(snap, d.get("confidence_level") or "LOW")
     d["explanations"] = _explanations(snap)
+    d["why_factors"] = _why_factors(snap)
+    d["risk_factors"] = _risk_factors(snap)
     d["metrics"] = snap.get("metrics", {}) if isinstance(snap, dict) else {}
     d["starting_pitchers"] = snap.get("starting_pitchers") if isinstance(snap, dict) else None
     d["bullpen"] = snap.get("bullpen") if isinstance(snap, dict) else None

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from data.nba_predictions_service import OffSeasonStrategy
-from data.explanation_engine import build_snapshot
+from data.explanation_engine import build_snapshot, explain_mlb_prediction
 from data.mlb_context import build_mlb_context
 from data.mlb_live_features import build_mlb_live_features
 from data.prediction_errors import ModelUnavailableError
@@ -144,13 +144,25 @@ class MLBLivePredictionService:
                 metrics["model_win_probability"] = round(win_prob, 4)
                 metrics["model_point_diff"] = round(float(pred["point_diff"][0]), 2)
 
+                explanation = explain_mlb_prediction(
+                    features=live_features,
+                    predicted_winner=predicted_winner,
+                    home_team=home_team,
+                    away_team=away_team,
+                    win_probability=win_prob,
+                    confidence_level=confidence_level,
+                    missing_data_warnings=mlb_ctx.get("missing_data_warnings", []),
+                    pitcher_explanations=mlb_ctx.get("explanations", []),
+                )
                 feature_snapshot = build_snapshot(
                     sport="MLB",
                     data_source="mlb_statsapi",
                     is_fallback=False,
                     confidence_score=win_prob,
-                    explanations=mlb_ctx.get("explanations", []),
+                    explanations=explanation["explanations"],
                     metrics=metrics,
+                    why_factors=explanation["why_factors"],
+                    risk_factors=explanation["risk_factors"],
                 )
                 feature_snapshot["starting_pitchers"] = mlb_ctx.get("starting_pitchers", {})
                 feature_snapshot["bullpen"] = mlb_ctx.get("bullpen", {})

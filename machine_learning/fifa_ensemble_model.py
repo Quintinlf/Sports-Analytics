@@ -14,7 +14,7 @@ This mirrors the existing separation between machine_learning/lightgbm_models.py
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -143,6 +143,26 @@ class FIFAEnsembleModel:
             'accuracy': accuracy,
             'log_loss': loss,
         }
+
+    def squad_metric_maps(
+        self, squad_profiles: pd.DataFrame, home_team: str, away_team: str
+    ) -> Optional[Tuple[Dict[str, float], Dict[str, float]]]:
+        """Return raw squad-profile numerics for each team (pre-PCA model inputs)."""
+        if not self.is_fitted or not self.squad_feature_cols:
+            return None
+        home_vec = self._team_squad_vector(squad_profiles, home_team)
+        away_vec = self._team_squad_vector(squad_profiles, away_team)
+        if home_vec is None or away_vec is None:
+            return None
+        home_map = {
+            str(col): float(val)
+            for col, val in zip(self.squad_feature_cols, home_vec)
+        }
+        away_map = {
+            str(col): float(val)
+            for col, val in zip(self.squad_feature_cols, away_vec)
+        }
+        return home_map, away_map
 
     def predict_match(
         self, squad_profiles: pd.DataFrame, home_team: str, away_team: str

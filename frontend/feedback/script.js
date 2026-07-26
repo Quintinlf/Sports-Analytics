@@ -767,10 +767,20 @@ function shortLabel(label) {
     "Home Field Advantage": "HOME ADV",
     "Home Advantage": "HOME ADV",
     "Starting Pitcher ERA": "PITCHER",
+    "Home Starter ERA": "PITCHER",
+    "Away Starter ERA": "PITCHER",
     "Starting Pitcher Strength": "PITCHER",
     "Bullpen Ranking": "BULLPEN",
     "Bullpen Strength": "BULLPEN",
     "Run Differential": "RUN DIFF",
+    "Recent scoring (runs / game)": "SCORING",
+    "Recent run prevention": "PREVENTION",
+    "Last-10 win rate": "FORM",
+    "Recent scoring": "SCORING",
+    "Elo rating edge": "ELO",
+    "Home court advantage": "HOME ADV",
+    "Expected goals (xG)": "xG",
+    "Goals scored": "GOALS",
     "Goals For / Against": "GOALS",
     "Possession %": "POSSESSION",
     "Offensive Rating": "OFF RATING",
@@ -824,16 +834,32 @@ function renderAICard(pred) {
   document.getElementById("conf-badge-label").textContent = pred.confidence_level;
   document.getElementById("conf-badge-label").className = `conf-badge ${cl}`;
 
-  const exps = (pred.explanations || []).filter(isMeaningfulExplanation);
+  // Prefer why_factors (model-input grounded); fall back to legacy explanations.
+  const whyFactors = Array.isArray(pred.why_factors) && pred.why_factors.length
+    ? pred.why_factors
+    : (pred.explanations || []).map(e => ({
+        label: e.label,
+        detail: e.value || e.label,
+        strength: e.weight,
+      }));
+  const whyHeading = document.getElementById("why-ai-heading");
+  if (whyHeading) {
+    whyHeading.textContent = pred.predicted_winner
+      ? `Why the AI picked ${pred.predicted_winner}`
+      : "Why the AI thinks this";
+  }
   const cardsRoot = document.getElementById("explanation-cards");
   const featureSection = document.getElementById("feature-bars");
   clearChildren(cardsRoot);
-  if (exps.length) {
-    for (const e of exps) {
+  const meaningfulWhy = whyFactors.filter(f =>
+    isMeaningfulExplanation({ value: f.detail || f.label })
+  );
+  if (meaningfulWhy.length) {
+    for (const f of meaningfulWhy) {
       const card = document.createElement("div");
       card.className = "metric-card";
-      appendText(card, "div", shortLabel(e.label), "k");
-      appendText(card, "div", String(e.value), "v");
+      appendText(card, "div", shortLabel(f.label), "k");
+      appendText(card, "div", String(f.detail || f.label), "v");
       cardsRoot.appendChild(card);
     }
     cardsRoot.parentElement.style.display = "block";
@@ -841,14 +867,14 @@ function renderAICard(pred) {
     cardsRoot.parentElement.style.display = "none";
   }
 
-  // Weighted reasoning bars (normalized, no raw JSON)
+  // Relative strength bars from why_factors
   clearChildren(featureSection);
-  if (exps.length) {
-    for (const e of exps) {
-      const pct = Math.round((e.weight || 0) * 100);
+  if (meaningfulWhy.length) {
+    for (const f of meaningfulWhy) {
+      const pct = Math.round((Number(f.strength) || 0) * 100);
       const row = document.createElement("div");
       row.className = "feature-row";
-      appendText(row, "span", e.label || "", "feature-label");
+      appendText(row, "span", f.label || "", "feature-label");
       const track = document.createElement("div");
       track.className = "feature-bar-track";
       const fill = document.createElement("div");
@@ -865,6 +891,22 @@ function renderAICard(pred) {
         el.style.width = el.dataset.pct + "%";
       });
     }, 80);
+  }
+
+  const riskBlock = document.getElementById("risk-factors-block");
+  const riskList = document.getElementById("risk-factors-list");
+  const risks = Array.isArray(pred.risk_factors) ? pred.risk_factors : [];
+  if (riskBlock && riskList) {
+    clearChildren(riskList);
+    if (risks.length) {
+      riskBlock.style.display = "block";
+      for (const r of risks) {
+        const detail = r.detail || r.label || r.code || "";
+        appendText(riskList, "li", `⚠ ${detail}`);
+      }
+    } else {
+      riskBlock.style.display = "none";
+    }
   }
 
   const bettingRoot = document.getElementById("exp-betting");
