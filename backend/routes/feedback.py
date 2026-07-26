@@ -37,11 +37,17 @@ from scripts.db_utils import (
     sql_bool_true,
     sql_case_bool_true,
     _column_names,
+    _invalidate_schema_cache,
     _split_display_name,
     _ensure_reviewer_profile_columns,
     _backfill_reviewer_names,
 )
 from data.demo_data import demo_predictions_enabled
+from backend.analyst_challenge import (
+    OVERRIDE_FOLLOWUP_PROMPT,
+    compose_analyst_reasoning,
+    evaluate_challenge,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -693,9 +699,11 @@ def init_platform(db_engine) -> None:
                 ("factor_tags", "TEXT"),
                 ("should_be_feature", "BOOLEAN"),
                 ("importance", "INTEGER"),
+                ("final_result", "TEXT"),
             ]:
                 if ddl[0] not in outcome_cols:
                     conn.execute(text(f"ALTER TABLE review_outcomes ADD COLUMN {ddl[0]} {ddl[1]}"))
+            _invalidate_schema_cache(db_engine, "review_outcomes")
 
         _seed_onboarding_questions(db_engine)
         _seed_research_questions(db_engine)
@@ -1678,7 +1686,11 @@ def submit_pregame_review(payload: PregameReviewRequest) -> Dict[str, Any]:
 
         review_id = str(uuid.uuid4())
         agree_with_model = payload.agree_with_model
-        # Auto-derive agree_with_model from pick vs predicted_winner if not explicit
+        # Prefer explicit flag; if pick clearly differs from AI, treat as disagreement.
+        pick_l = (payload.reviewer_pick or "").strip().lower()
+        ai_l = (pred["predicted_winner"] or "").strip().lower()
+        if agree_with_model and pick_l and ai_l and pick_l != ai_l:
+            agree_with_model = False
         factors_json = json.dumps(payload.missing_factors)
         session.execute(
             text("""
@@ -1707,7 +1719,13 @@ def submit_pregame_review(payload: PregameReviewRequest) -> Dict[str, Any]:
         )
         session.commit()
 
-    return {"review_id": review_id, "status": "saved"}
+    reasoning = compose_analyst_reasoning(payload.missing_factors, payload.pregame_notes)
+    return {
+        "review_id": review_id,
+        "status": "saved",
+        "analyst_disagreed": not agree_with_model,
+        "analyst_reasoning": reasoning,
+    }
 
 
 @router.post("/review-outcomes")
@@ -1715,8 +1733,11 @@ def submit_postgame_outcome(payload: PostgameOutcomeRequest) -> Dict[str, Any]:
     with get_db_session() as session:
         # Load pregame review
         review = session.execute(
-            text("SELECT review_id, prediction_id, reviewer_id, reviewer_pick, agree_with_model "
-                 "FROM prediction_reviews WHERE review_id = :rid"),
+            text(
+                "SELECT review_id, prediction_id, reviewer_id, reviewer_pick, "
+                "agree_with_model, missing_factors, pregame_notes "
+                "FROM prediction_reviews WHERE review_id = :rid"
+            ),
             {"rid": payload.review_id},
         ).mappings().first()
         if not review:
@@ -1741,17 +1762,29 @@ def submit_postgame_outcome(payload: PostgameOutcomeRequest) -> Dict[str, Any]:
         if pred["actual_winner"] is None:
             raise HTTPException(status_code=400, detail="Game has not settled yet")
 
-        model_correct = bool(pred["correct"]) if pred["correct"] is not None else (
-            pred["predicted_winner"] == pred["actual_winner"]
+        reasoning = compose_analyst_reasoning(
+            review.get("missing_factors"),
+            review.get("pregame_notes"),
         )
-        reviewer_correct = (
-            review["reviewer_pick"].strip().lower() == pred["actual_winner"].strip().lower()
+        challenge = evaluate_challenge(
+            agree_with_model=bool(review["agree_with_model"]),
+            reviewer_pick=review["reviewer_pick"],
+            predicted_winner=pred["predicted_winner"],
+            actual_winner=pred["actual_winner"],
+            model_correct_flag=pred["correct"],
+            analyst_reasoning=reasoning,
         )
-        reviewer_beat = (
-            reviewer_correct
-            and not model_correct
-            and not bool(review["agree_with_model"])
-        )
+        model_correct = challenge["ai_was_correct"]
+        reviewer_correct = challenge["analyst_was_correct"]
+        reviewer_beat = challenge["successful_analyst_override"]
+
+        # Successful override: collect what the model missed (reasoning data).
+        followup_reason = (payload.followup_reason or "").strip() or None
+        if reviewer_beat and not followup_reason:
+            raise HTTPException(
+                status_code=400,
+                detail=OVERRIDE_FOLLOWUP_PROMPT,
+            )
 
         structured_explanation = payload.structured_explanation
         factor_tags_json = json.dumps(payload.factor_tags or [])
@@ -1763,31 +1796,62 @@ def submit_postgame_outcome(payload: PostgameOutcomeRequest) -> Dict[str, Any]:
             should_be_feature = None
             importance = None
 
-        session.execute(
-            text("""
-                INSERT INTO review_outcomes
-                    (review_id, model_correct, reviewer_correct,
-                     reviewer_beat_model, followup_missing_factors,
-                     followup_reason, structured_explanation, factor_tags,
-                     should_be_feature, importance, resolved_at)
-                VALUES
-                    (:rid, :mc, :rc, :beat, :factors, :reason, :structured_explanation,
-                     :factor_tags, :should_be_feature, :importance, :ts)
-            """),
-            {
-                "rid": payload.review_id,
-                "mc": model_correct,
-                "rc": reviewer_correct,
-                "beat": reviewer_beat,
-                "factors": json.dumps(payload.followup_missing_factors),
-                "reason": payload.followup_reason,
-                "structured_explanation": structured_explanation,
-                "factor_tags": factor_tags_json,
-                "should_be_feature": should_be_feature,
-                "importance": importance,
-                "ts": datetime.utcnow().isoformat(),
-            },
-        )
+        # Prefer final_result column when present (added for challenge tracking).
+        outcome_cols = _column_names(engine, "review_outcomes")
+        if "final_result" in outcome_cols:
+            session.execute(
+                text("""
+                    INSERT INTO review_outcomes
+                        (review_id, model_correct, reviewer_correct,
+                         reviewer_beat_model, final_result, followup_missing_factors,
+                         followup_reason, structured_explanation, factor_tags,
+                         should_be_feature, importance, resolved_at)
+                    VALUES
+                        (:rid, :mc, :rc, :beat, :final_result, :factors, :reason,
+                         :structured_explanation, :factor_tags, :should_be_feature,
+                         :importance, :ts)
+                """),
+                {
+                    "rid": payload.review_id,
+                    "mc": model_correct,
+                    "rc": reviewer_correct,
+                    "beat": reviewer_beat,
+                    "final_result": challenge["final_result"],
+                    "factors": json.dumps(payload.followup_missing_factors),
+                    "reason": followup_reason,
+                    "structured_explanation": structured_explanation,
+                    "factor_tags": factor_tags_json,
+                    "should_be_feature": should_be_feature,
+                    "importance": importance,
+                    "ts": datetime.utcnow().isoformat(),
+                },
+            )
+        else:
+            session.execute(
+                text("""
+                    INSERT INTO review_outcomes
+                        (review_id, model_correct, reviewer_correct,
+                         reviewer_beat_model, followup_missing_factors,
+                         followup_reason, structured_explanation, factor_tags,
+                         should_be_feature, importance, resolved_at)
+                    VALUES
+                        (:rid, :mc, :rc, :beat, :factors, :reason, :structured_explanation,
+                         :factor_tags, :should_be_feature, :importance, :ts)
+                """),
+                {
+                    "rid": payload.review_id,
+                    "mc": model_correct,
+                    "rc": reviewer_correct,
+                    "beat": reviewer_beat,
+                    "factors": json.dumps(payload.followup_missing_factors),
+                    "reason": followup_reason,
+                    "structured_explanation": structured_explanation,
+                    "factor_tags": factor_tags_json,
+                    "should_be_feature": should_be_feature,
+                    "importance": importance,
+                    "ts": datetime.utcnow().isoformat(),
+                },
+            )
         session.commit()
 
     return {
@@ -1796,6 +1860,13 @@ def submit_postgame_outcome(payload: PostgameOutcomeRequest) -> Dict[str, Any]:
         "reviewer_correct": reviewer_correct,
         "reviewer_beat_model": reviewer_beat,
         "deep_analysis_unlocked": reviewer_beat,
+        "analyst_disagreed": challenge["analyst_disagreed"],
+        "analyst_reasoning": challenge["analyst_reasoning"],
+        "final_result": challenge["final_result"],
+        "analyst_was_correct": challenge["analyst_was_correct"],
+        "ai_was_correct": challenge["ai_was_correct"],
+        "successful_analyst_override": challenge["successful_analyst_override"],
+        "override_followup_prompt": challenge["override_followup_prompt"],
         "status": "saved",
     }
 

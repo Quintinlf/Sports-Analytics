@@ -448,10 +448,14 @@ class TestAnalystPhase1(unittest.TestCase):
         review_id = pregame.json()["review_id"]
         outcome = self.client.post(
             "/api/feedback/review-outcomes",
-            json={"review_id": review_id},
+            json={
+                "review_id": review_id,
+                "followup_reason": "Bullpen usage and matchup platoon splits the model ignored.",
+            },
         )
         self.assertEqual(outcome.status_code, 200)
         self.assertTrue(outcome.json()["reviewer_beat_model"])
+        self.assertTrue(outcome.json()["successful_analyst_override"])
         return review_id
 
     def test_case_study_flow(self) -> None:

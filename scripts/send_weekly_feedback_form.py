@@ -11,6 +11,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 # Path alignment when invoked as `python scripts/send_weekly_feedback_form.py`
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -30,8 +31,10 @@ from scripts.db_utils import (
 logger = logging.getLogger("weekly_feedback_distribution")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s")
 
-DEFAULT_EMAIL_DAYS = [0, 3]  # Sunday and Wednesday (UTC cron weekdays)
+# Cron-style weekdays in America/Los_Angeles: Sun=0 … Sat=6
+DEFAULT_EMAIL_DAYS = [0, 3]  # Sunday and Wednesday Pacific
 EMAIL_TYPE_WEEKLY_DIGEST = "weekly_digest"
+PACIFIC_TZ = ZoneInfo("America/Los_Angeles")
 
 EMAIL_SEND_LOG_DDL = """
 CREATE TABLE IF NOT EXISTS email_send_log (
@@ -49,6 +52,36 @@ def ensure_email_send_log(engine: Engine) -> None:
     """Create the idempotency log table if missing (SQLite + Postgres)."""
     with engine.begin() as conn:
         conn.execute(text(EMAIL_SEND_LOG_DDL))
+
+
+def pacific_now(now: Optional[datetime] = None) -> datetime:
+    """Return ``now`` (or wall clock) as an aware datetime in America/Los_Angeles."""
+    if now is None:
+        return datetime.now(PACIFIC_TZ)
+    if now.tzinfo is None:
+        return now.replace(tzinfo=PACIFIC_TZ)
+    return now.astimezone(PACIFIC_TZ)
+
+
+def pacific_send_window_key(now: Optional[datetime] = None) -> str:
+    """Idempotency key for weekly_digest: Pacific calendar date (YYYY-MM-DD).
+
+    Distinct from analyst_invite (which uses send_date='onboarding') so email
+    types never collide.
+    """
+    return pacific_now(now).strftime("%Y-%m-%d")
+
+
+def pacific_cron_weekday(now: Optional[datetime] = None) -> int:
+    """Cron weekday in Pacific time: Sunday=0 … Saturday=6."""
+    # datetime.weekday(): Mon=0 … Sun=6 → cron Sun=0 … Sat=6
+    return (pacific_now(now).weekday() + 1) % 7
+
+
+def is_digest_send_day(now: Optional[datetime] = None, email_days: Optional[List[int]] = None) -> bool:
+    """True when Pacific weekday is in the configured digest days (default Sun/Wed)."""
+    days = list(email_days) if email_days is not None else list(DEFAULT_EMAIL_DAYS)
+    return pacific_cron_weekday(now) in days
 
 
 def already_sent(
@@ -71,17 +104,22 @@ def already_sent(
     return row is not None
 
 
-def record_send(
+def try_claim_send(
     engine: Engine,
     reviewer_id: str,
     email_type: str,
     send_date: str,
     email: str,
-) -> None:
-    """Persist a successful send. Unique key makes retries/no-ops safe."""
-    ts = datetime.utcnow().isoformat()
+) -> bool:
+    """Atomically claim a send slot before SMTP.
+
+    Returns True if this runner owns the send; False if another run already
+    claimed the same (reviewer_id, email_type, send_date) window — preventing
+    duplicate emails from retries / overlapping workflow_dispatch.
+    """
+    ts = datetime.now(PACIFIC_TZ).isoformat()
     with engine.begin() as conn:
-        conn.execute(
+        result = conn.execute(
             text(
                 """
                 INSERT INTO email_send_log (reviewer_id, email_type, send_date, email, sent_at)
@@ -97,6 +135,38 @@ def record_send(
                 "sent_at": ts,
             },
         )
+        # SQLAlchemy 2: rowcount is 1 on insert, 0 on conflict DO NOTHING
+        return (result.rowcount or 0) > 0
+
+
+def release_send_claim(
+    engine: Engine,
+    reviewer_id: str,
+    email_type: str,
+    send_date: str,
+) -> None:
+    """Remove a claim after SMTP failure so a later retry can send."""
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                DELETE FROM email_send_log
+                WHERE reviewer_id = :rid AND email_type = :etype AND send_date = :sdate
+                """
+            ),
+            {"rid": reviewer_id, "etype": email_type, "sdate": send_date},
+        )
+
+
+def record_send(
+    engine: Engine,
+    reviewer_id: str,
+    email_type: str,
+    send_date: str,
+    email: str,
+) -> None:
+    """Persist a successful send (compatible with invite script / older tests)."""
+    try_claim_send(engine, reviewer_id, email_type, send_date, email)
 
 
 def _parse_sports(raw: str | None) -> List[str]:
@@ -123,14 +193,26 @@ def _parse_email_days(raw: str | None) -> List[int]:
     return list(DEFAULT_EMAIL_DAYS)
 
 
-def _should_send_today(email_days: List[int], weekday: Optional[int] = None) -> bool:
-    day = weekday if weekday is not None else datetime.utcnow().weekday()
-    # Python weekday: Mon=0 … Sun=6; cron uses Sun=0 … Sat=6
-    cron_day = (day + 1) % 7
-    return cron_day in email_days
+def _should_send_today(
+    email_days: List[int],
+    weekday: Optional[int] = None,
+    now: Optional[datetime] = None,
+) -> bool:
+    """Gate on Pacific weekday (cron numbering), not UTC.
+
+    ``weekday`` if provided is already a Pacific cron weekday (Sun=0).
+    """
+    if weekday is not None:
+        return weekday in email_days
+    return is_digest_send_day(now=now, email_days=email_days)
 
 
-def load_reviewers(engine, allowlist: List[str] | None = None, weekday: Optional[int] = None) -> List[Dict[str, Any]]:
+def load_reviewers(
+    engine,
+    allowlist: List[str] | None = None,
+    weekday: Optional[int] = None,
+    now: Optional[datetime] = None,
+) -> List[Dict[str, Any]]:
     sql = text(
         """
         SELECT r.reviewer_id, r.name, r.email,
@@ -144,6 +226,7 @@ def load_reviewers(engine, allowlist: List[str] | None = None, weekday: Optional
         rows = conn.execute(sql).mappings().all()
     result = []
     allow = {e.strip().lower() for e in (allowlist or []) if e.strip()}
+    pt_weekday = weekday if weekday is not None else pacific_cron_weekday(now)
     for row in rows:
         if row["emails_enabled"] is not None and not bool(row["emails_enabled"]):
             continue
@@ -151,7 +234,7 @@ def load_reviewers(engine, allowlist: List[str] | None = None, weekday: Optional
         if allow and email.lower() not in allow:
             continue
         days = _parse_email_days(row["email_days"])
-        if not _should_send_today(days, weekday=weekday):
+        if not _should_send_today(days, weekday=pt_weekday, now=now):
             continue
         result.append(
             {
@@ -357,7 +440,7 @@ def send_email(to_email: str, subject: str, html_content: str) -> None:
         server.sendmail(from_email, [to_email], msg.as_string())
 
 
-def main() -> None:
+def main(now: Optional[datetime] = None) -> None:
     try:
         db_url = resolve_database_url(default=None, required=True)
     except RuntimeError:
@@ -370,30 +453,63 @@ def main() -> None:
         logger.error("FEEDBACK_BASE_URL is required.")
         sys.exit(1)
 
+    pt = pacific_now(now)
+    force = os.getenv("WEEKLY_EMAIL_FORCE", "").strip().lower() in ("1", "true", "yes")
+    if not force and not is_digest_send_day(pt):
+        logger.info(
+            "Skipping weekly digest — Pacific time is %s (weekday cron=%s). "
+            "Sends only Sunday/Wednesday unless WEEKLY_EMAIL_FORCE=1.",
+            pt.isoformat(),
+            pacific_cron_weekday(pt),
+        )
+        sys.exit(0)
+
     engine = create_database_engine(db_url)
     ensure_default_reviewers(engine)
     ensure_email_send_log(engine)
 
     allowlist_raw = os.getenv("WEEKLY_EMAIL_ALLOWLIST", "").strip()
     allowlist = [e.strip() for e in allowlist_raw.split(",") if e.strip()] or None
-    reviewers = load_reviewers(engine, allowlist=allowlist)
+    if force:
+        # Manual / test runs may fire on any calendar day.
+        reviewers = _load_reviewers_ignore_days(engine, allowlist=allowlist)
+    else:
+        reviewers = load_reviewers(
+            engine, allowlist=allowlist, weekday=pacific_cron_weekday(pt), now=pt
+        )
     if not reviewers:
         logger.warning("No reviewers eligible for digest today (check email_days / allowlist).")
         sys.exit(0)
 
     research = load_featured_research_question(engine)
-    send_date = datetime.utcnow().strftime("%Y-%m-%d")
+    # Pacific calendar date — one weekly_digest per reviewer per PT send window
+    send_date = pacific_send_window_key(pt)
+    logger.info(
+        "Weekly digest window: Pacific=%s send_key=%s email_type=%s",
+        pt.isoformat(),
+        send_date,
+        EMAIL_TYPE_WEEKLY_DIGEST,
+    )
 
     sent = 0
     failed = 0
     skipped = 0
     for reviewer in reviewers:
         favorite = reviewer["favorite_sports"][0] if reviewer["favorite_sports"] else "MLB"
+        claimed = False
         try:
-            if already_sent(engine, reviewer["reviewer_id"], EMAIL_TYPE_WEEKLY_DIGEST, send_date):
+            # Claim BEFORE SMTP so overlapping Actions runs cannot double-send.
+            claimed = try_claim_send(
+                engine,
+                reviewer["reviewer_id"],
+                EMAIL_TYPE_WEEKLY_DIGEST,
+                send_date,
+                reviewer["email"],
+            )
+            if not claimed:
                 skipped += 1
                 logger.info(
-                    "Skipping digest for %s (%s) — already sent on %s",
+                    "Skipping digest for %s (%s) — already claimed/sent for window %s",
                     reviewer["name"],
                     reviewer["email"],
                     send_date,
@@ -408,18 +524,17 @@ def main() -> None:
                 subject=f"AI Analyst Digest - {send_date}",
                 html_content=html,
             )
-            # Record only after successful SMTP so failed sends can retry.
-            record_send(
-                engine,
-                reviewer["reviewer_id"],
-                EMAIL_TYPE_WEEKLY_DIGEST,
-                send_date,
-                reviewer["email"],
-            )
             sent += 1
             logger.info("Sent reviewer digest to %s (%s)", reviewer["name"], reviewer["email"])
         except Exception as exc:
             failed += 1
+            if claimed:
+                release_send_claim(
+                    engine,
+                    reviewer["reviewer_id"],
+                    EMAIL_TYPE_WEEKLY_DIGEST,
+                    send_date,
+                )
             logger.error(
                 "Failed to send digest to %s (%s): %s",
                 reviewer["name"],
@@ -437,6 +552,40 @@ def main() -> None:
     if sent == 0 and failed > 0 and skipped == 0:
         logger.error("All email sends failed for %s reviewer(s).", len(reviewers))
         sys.exit(1)
+
+
+def _load_reviewers_ignore_days(
+    engine: Engine, allowlist: List[str] | None = None
+) -> List[Dict[str, Any]]:
+    """Load eligible reviewers without Pacific day gate (WEEKLY_EMAIL_FORCE only)."""
+    sql = text(
+        """
+        SELECT r.reviewer_id, r.name, r.email,
+               rp.favorite_sports, rp.emails_enabled
+        FROM reviewers r
+        LEFT JOIN reviewer_preferences rp ON rp.reviewer_id = r.reviewer_id
+        WHERE r.email IS NOT NULL
+        """
+    )
+    with engine.begin() as conn:
+        rows = conn.execute(sql).mappings().all()
+    allow = {e.strip().lower() for e in (allowlist or []) if e.strip()}
+    result = []
+    for row in rows:
+        if row["emails_enabled"] is not None and not bool(row["emails_enabled"]):
+            continue
+        email = (row["email"] or "").strip()
+        if allow and email.lower() not in allow:
+            continue
+        result.append(
+            {
+                "reviewer_id": row["reviewer_id"],
+                "name": row["name"],
+                "email": row["email"],
+                "favorite_sports": _parse_sports(row["favorite_sports"]) or ["MLB"],
+            }
+        )
+    return result
 
 
 if __name__ == "__main__":

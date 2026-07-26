@@ -103,6 +103,8 @@ class TestWeeklyEmailIdempotency(unittest.TestCase):
             "SMTP_USER": "u",
             "SMTP_PASS": "p",
             "FEEDBACK_EMAIL_FROM": "from@example.com",
+            # Force bypasses Pacific Sun/Wed gate for unit tests.
+            "WEEKLY_EMAIL_FORCE": "1",
         }
         with patch.dict(os.environ, env, clear=False):
             with patch("scripts.send_weekly_feedback_form.create_database_engine", return_value=self.engine):

@@ -311,23 +311,28 @@
         </div>
 
         <div class="beat-ai-banner" id="beat-ai-banner">
-          <h3>You found a case where the model was wrong</h3>
-          <p>Help teach it why. Your explanation becomes training data.</p>
+          <h3>Successful analyst override</h3>
+          <p id="override-followup-prompt">
+            If your prediction was correct and the AI was wrong, explain what information the model missed.
+            Your reasoning becomes training data — this is not a leaderboard.
+          </p>
         </div>
 
         <div class="form-group" style="margin-bottom:20px">
-          <label>What did you see that the AI missed?</label>
+          <label>What information did the model miss? (tags)</label>
           <div class="check-group" id="postgame-factors-group"></div>
         </div>
 
         <div class="form-group" style="margin-bottom:24px">
-          <label>Looking back, why were you right?</label>
-          <textarea id="postgame-reason" placeholder="Explain your edge over the model…"></textarea>
+          <label id="postgame-reason-label">
+            If your prediction was correct and the AI was wrong, explain what information the model missed.
+          </label>
+          <textarea id="postgame-reason" placeholder="Describe the signal, context, or mismatch the model did not use…"></textarea>
         </div>
 
         <div id="deep-analysis-fields" style="display:none">
           <div class="form-group" style="margin-bottom:16px">
-            <label>What factor did the AI miss?</label>
+            <label>Structured write-up (optional deep dive)</label>
             <textarea id="structured-explanation" placeholder="Describe the missing factor and why it changed the game."></textarea>
           </div>
           <div class="form-group" style="margin-bottom:16px">

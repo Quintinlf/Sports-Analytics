@@ -145,7 +145,16 @@ class PredictionReview(Base):
 
 
 class ReviewOutcome(Base):
-    """Postgame reflection linked to a pregame review."""
+    """Postgame reflection linked to a pregame review.
+
+    Challenge tracking (successful analyst override) uses:
+    - model_correct → ai_was_correct
+    - reviewer_correct → analyst_was_correct
+    - reviewer_beat_model → successful_analyst_override
+    - final_result → settled actual winner
+    Pregame disagreement lives on PredictionReview.agree_with_model /
+    pregame_notes (analyst_disagreed / analyst_reasoning).
+    """
 
     __tablename__ = "review_outcomes"
 
@@ -153,6 +162,7 @@ class ReviewOutcome(Base):
     model_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     reviewer_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     reviewer_beat_model: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    final_result: Mapped[str | None] = mapped_column(String(100), nullable=True)
     followup_missing_factors: Mapped[str | None] = mapped_column(Text, nullable=True)
     followup_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     structured_explanation: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -1,10 +1,16 @@
-name: Weekly Feedback Test (Quintin Only)
+name: Analyst Invite Email (Allowlist Only)
 
+# Manual only — never auto-invite everyone.
 on:
   workflow_dispatch:
+    inputs:
+      allowlist:
+        description: "Comma-separated emails to invite (required)"
+        required: true
+        type: string
 
 jobs:
-  send-test-digest:
+  send-invites:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -27,7 +33,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -m scripts.init_database
 
-      - name: Send test digest to Quintin only
+      - name: Send analyst invitation emails (allowlist only)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -36,7 +42,5 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           FEEDBACK_BASE_URL: ${{ secrets.FEEDBACK_BASE_URL }}
           FEEDBACK_EMAIL_FROM: ${{ secrets.FEEDBACK_EMAIL_FROM }}
-          WEEKLY_EMAIL_ALLOWLIST: quintinlf7@gmail.com
-          # Manual tests may run outside Sunday/Wednesday Pacific midnight.
-          WEEKLY_EMAIL_FORCE: "1"
-        run: python -m scripts.send_weekly_feedback_form
+          ANALYST_INVITE_ALLOWLIST: ${{ inputs.allowlist }}
+        run: python -m scripts.send_analyst_invite

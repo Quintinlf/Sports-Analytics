@@ -1139,6 +1139,7 @@ function showPostgameSection(reviewId) {
     String(lastPregamePick).toLowerCase() === String(pred.actual_winner).toLowerCase() &&
     !(pred.correct === 1 || pred.correct === true)
   );
+  document.getElementById("beat-ai-banner").style.display = unlockDeepAnalysis ? "block" : "none";
   if (unlockDeepAnalysis) {
     document.getElementById("deep-analysis-fields").style.display = "block";
   }
@@ -1175,6 +1176,14 @@ async function submitPostgame() {
   const factors = [...document.querySelectorAll('input[name="pg_factor"]:checked')]
     .map(el => el.value);
   const reason = document.getElementById("postgame-reason").value.trim() || null;
+  const deepVisible = document.getElementById("deep-analysis-fields").style.display !== "none";
+  if (deepVisible && !reason) {
+    toast(
+      "If your prediction was correct and the AI was wrong, explain what information the model missed.",
+      "error"
+    );
+    return;
+  }
 
   const payload = {
     review_id: reviewId,
@@ -1221,9 +1230,13 @@ async function submitPostgame() {
       ? "You called it right"
       : "Wrong pick this time";
 
-    // Beat AI banner
-    if (data.reviewer_beat_model) {
+    // Successful analyst override — collect reasoning (not ranking)
+    if (data.successful_analyst_override || data.reviewer_beat_model) {
       document.getElementById("beat-ai-banner").style.display = "block";
+      const promptEl = document.getElementById("override-followup-prompt");
+      if (promptEl && data.override_followup_prompt) {
+        promptEl.textContent = data.override_followup_prompt;
+      }
       if (document.getElementById("deep-analysis-fields").style.display === "none") {
         document.getElementById("deep-analysis-fields").style.display = "block";
       }

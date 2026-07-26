@@ -2,8 +2,16 @@ name: Weekly Reviewer Digest
 
 on:
   schedule:
-    - cron: "0 0 * * 0"
-    - cron: "0 0 * * 3"
+    # Target: Sunday & Wednesday 12:00 AM America/Los_Angeles.
+    # GitHub Actions cron is UTC-only and does not follow DST, so we fire at both
+    # possible UTC offsets; the Python script gates on America/Los_Angeles and
+    # email_send_log so exactly one digest is delivered per PT send window.
+    #
+    #   PDT (UTC-7): midnight PT = 07:00 UTC
+    #   PST (UTC-8): midnight PT = 08:00 UTC
+    #
+    # cron day-of-week: 0 = Sunday, 3 = Wednesday (UTC calendar day of the fire).
+    - cron: "0 7,8 * * 0,3"
   workflow_dispatch:
 
 jobs:
