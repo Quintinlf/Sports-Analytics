@@ -13,6 +13,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
+# Path alignment when invoked as `python scripts/run_daily_predictions.py`
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import backend.config  # noqa: F401 — load .env before database URL resolution
+
 from sqlalchemy import text
 
 from scripts.db_utils import (
@@ -20,6 +25,7 @@ from scripts.db_utils import (
     ensure_unified_schema,
     insert_prediction,
     insert_prediction_options,
+    resolve_database_url,
 )
 from data.sport_config import (
     binary_home_win_probabilities,
@@ -196,7 +202,7 @@ def _insert_unified_predictions(engine, rows: List[Dict[str, Any]]) -> int:
 
 def main() -> int:
     try:
-        database_url = os.getenv("DATABASE_URL") or "sqlite:///./sports_analytics.db"
+        database_url = resolve_database_url()
         engine = create_database_engine(database_url)
         _ensure_mlb_predictions_table(engine)
         ensure_unified_schema(engine)

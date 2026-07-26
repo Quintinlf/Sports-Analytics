@@ -2,6 +2,8 @@
 
 Usage:
   DATABASE_URL=postgresql://... python -m scripts.init_database
+  # Also accepts SUPABASE_DATABASE_URL or SUPERBASE_DATABASE_URL
+  # (same priority as FastAPI via scripts.db_utils.resolve_database_url).
 """
 from __future__ import annotations
 
@@ -20,7 +22,11 @@ from sqlalchemy import inspect
 
 from backend.db import Base, engine
 import backend.models  # noqa: F401 — register every ORM model with Base.metadata
-from scripts.db_utils import ensure_default_reviewers, ensure_unified_schema
+from scripts.db_utils import (
+    ensure_default_reviewers,
+    ensure_unified_schema,
+    resolve_database_url,
+)
 
 DEBUG_LOG = ROOT / "debug-ca0755.log"
 
@@ -60,6 +66,10 @@ def _agent_log(hypothesis_id: str, location: str, message: str, data: dict) -> N
 
 def initialize_database() -> list[str]:
     """Create ORM tables and unified prediction schema. Returns sorted table names."""
+    # Deploy-time path must always apply DDL, even on PostgreSQL where the web
+    # process defaults SCHEMA_AUTO_MIGRATE=false.
+    os.environ["SCHEMA_AUTO_MIGRATE"] = "true"
+
     orm_tables = sorted(Base.metadata.tables.keys())
     _agent_log(
         "B",
@@ -81,6 +91,18 @@ def initialize_database() -> list[str]:
     ensure_unified_schema(engine)
     ensure_default_reviewers(engine)
 
+    # Keep question catalogs in sync on deploy (same UPSERTs as web init_platform).
+    try:
+        from backend.routes.feedback import (
+            _seed_onboarding_questions,
+            _seed_research_questions,
+        )
+
+        _seed_onboarding_questions(engine)
+        _seed_research_questions(engine)
+    except Exception as exc:
+        print(f"WARNING: question seed skipped: {exc}")
+
     after = sorted(inspect(engine).get_table_names())
     missing = sorted(REQUIRED_TABLES - set(after))
     _agent_log(
@@ -97,8 +119,11 @@ def initialize_database() -> list[str]:
 
 
 def main() -> None:
-    if not os.getenv("DATABASE_URL"):
-        print("ERROR: DATABASE_URL is required.", file=sys.stderr)
+    try:
+        # Same priority as FastAPI / cron: SUPABASE > SUPERBASE > DATABASE_URL.
+        resolve_database_url(default=None, required=True)
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
 
     tables = initialize_database()

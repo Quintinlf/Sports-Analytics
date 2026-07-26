@@ -14,10 +14,16 @@ from typing import Any, Dict, List, Set
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import backend.config  # noqa: F401 — load .env before database URL resolution
+
 from sqlalchemy import inspect, text
 
 from backend.models import Base
-from scripts.db_utils import create_database_engine, ensure_unified_schema
+from scripts.db_utils import (
+    create_database_engine,
+    ensure_unified_schema,
+    resolve_database_url,
+)
 
 SQLITE_DEFAULT = "sqlite:///./sports_analytics.db"
 
@@ -159,12 +165,17 @@ def _upsert_quintin(pg_engine) -> None:
 
 def main() -> int:
     sqlite_url = os.getenv("SQLITE_DATABASE_URL", SQLITE_DEFAULT)
-    pg_url = os.getenv("DATABASE_URL")
-    if not pg_url:
-        print("ERROR: DATABASE_URL (PostgreSQL target) is required.")
+    try:
+        # Same priority as app: SUPABASE > SUPERBASE > DATABASE_URL.
+        pg_url = resolve_database_url(default=None, required=True)
+    except RuntimeError:
+        print(
+            "ERROR: SUPABASE_DATABASE_URL, SUPERBASE_DATABASE_URL, or "
+            "DATABASE_URL (PostgreSQL target) is required."
+        )
         return 1
     if pg_url.startswith("sqlite"):
-        print("ERROR: DATABASE_URL must be a PostgreSQL URL, not SQLite.")
+        print("ERROR: PostgreSQL target URL must not be SQLite.")
         return 1
 
     sqlite_engine = create_database_engine(sqlite_url)

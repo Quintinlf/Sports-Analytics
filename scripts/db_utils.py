@@ -3,12 +3,51 @@ from __future__ import annotations
 import json
 import os
 import hashlib
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from urllib.parse import unquote, urlparse
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+
+# #region agent log
+_DEBUG_LOG_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "debug-968447.log"
+)
+_DEBUG_REFLECT_COUNTS: Dict[str, int] = {
+    "has_table": 0,
+    "get_columns": 0,
+    "catalog_lookup": 0,
+    "cache_hit": 0,
+    "inspect_calls": 0,
+}
+
+
+def _agent_debug_log(
+    hypothesis_id: str,
+    location: str,
+    message: str,
+    data: Optional[Dict[str, Any]] = None,
+    run_id: str = "pre-fix",
+) -> None:
+    try:
+        payload = {
+            "sessionId": "968447",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data or {},
+            "timestamp": int(time.time() * 1000),
+        }
+        with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(payload, default=str) + "\n")
+    except Exception:
+        pass
+
+
+# #endregion
 
 
 DEFAULT_SQLITE_URL = "sqlite:///./sports_analytics.db"
@@ -264,21 +303,164 @@ def _is_postgresql(engine: Engine) -> bool:
     return engine.dialect.name == "postgresql"
 
 
+def schema_auto_migrate(engine: Engine) -> bool:
+    """Whether runtime code may CREATE/ALTER schema.
+
+    Defaults: SQLite yes (local/dev), PostgreSQL no (production expects
+    deploy-time ``python -m scripts.init_database`` / SQL migrations).
+    Override with SCHEMA_AUTO_MIGRATE=true|false.
+    """
+    flag = os.getenv("SCHEMA_AUTO_MIGRATE", "").strip().lower()
+    if flag in ("1", "true", "yes", "on"):
+        return True
+    if flag in ("0", "false", "no", "off"):
+        return False
+    return not _is_postgresql(engine)
+
+
+def _engine_schema_cache(engine: Engine) -> Dict[str, Optional[set[str]]]:
+    """Process-local cache: table -> column set, or None if table missing."""
+    cache = getattr(engine, "_sports_analytics_schema_cache", None)
+    if cache is None:
+        cache = {}
+        setattr(engine, "_sports_analytics_schema_cache", cache)
+    return cache
+
+
+def _invalidate_schema_cache(engine: Engine, table_name: Optional[str] = None) -> None:
+    cache = _engine_schema_cache(engine)
+    if table_name is None:
+        cache.clear()
+    else:
+        cache.pop(table_name, None)
+
+
+def _fetch_column_names_on_connection(
+    conn: Any, engine: Engine, table_name: str
+) -> Optional[set[str]]:
+    """Cheap catalog lookup (no SQLAlchemy Inspector). None => table missing."""
+    # #region agent log
+    t0 = time.perf_counter()
+    _DEBUG_REFLECT_COUNTS["catalog_lookup"] += 1
+    # #endregion
+    if _is_postgresql(engine):
+        exists = conn.execute(
+            text("SELECT to_regclass(:reg) IS NOT NULL"),
+            {"reg": f"public.{table_name}"},
+        ).scalar()
+        if not exists:
+            # #region agent log
+            _agent_debug_log(
+                "A",
+                "db_utils.py:_fetch_column_names_on_connection",
+                "catalog table missing",
+                {
+                    "table": table_name,
+                    "ms": round((time.perf_counter() - t0) * 1000, 2),
+                    "counts": dict(_DEBUG_REFLECT_COUNTS),
+                },
+                run_id="post-fix",
+            )
+            # #endregion
+            return None
+        rows = conn.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = 'public' AND table_name = :t"
+            ),
+            {"t": table_name},
+        ).fetchall()
+        names = {str(r[0]) for r in rows}
+    else:
+        row = conn.execute(
+            text(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = :t LIMIT 1"
+            ),
+            {"t": table_name},
+        ).first()
+        if not row:
+            return None
+        # table_name is always an internal identifier, never user input
+        rows = conn.execute(text(f"PRAGMA table_info({table_name})")).fetchall()
+        names = {str(r[1]) for r in rows}
+    # #region agent log
+    _agent_debug_log(
+        "A",
+        "db_utils.py:_fetch_column_names_on_connection",
+        "catalog lookup done",
+        {
+            "table": table_name,
+            "col_count": len(names),
+            "ms": round((time.perf_counter() - t0) * 1000, 2),
+            "counts": dict(_DEBUG_REFLECT_COUNTS),
+            "dialect": engine.dialect.name,
+        },
+        run_id="post-fix",
+    )
+    # #endregion
+    return names
+
+
+def _column_names(engine: Engine, table_name: str) -> set[str]:
+    """Cached column names via information_schema/PRAGMA (not Inspector)."""
+    cache = _engine_schema_cache(engine)
+    if table_name in cache:
+        # #region agent log
+        _DEBUG_REFLECT_COUNTS["cache_hit"] += 1
+        _agent_debug_log(
+            "B",
+            "db_utils.py:_column_names",
+            "cache hit",
+            {
+                "table": table_name,
+                "exists": cache[table_name] is not None,
+                "counts": dict(_DEBUG_REFLECT_COUNTS),
+            },
+            run_id="post-fix",
+        )
+        # #endregion
+        cached = cache[table_name]
+        return set() if cached is None else set(cached)
+
+    with engine.connect() as conn:
+        fetched = _fetch_column_names_on_connection(conn, engine, table_name)
+    cache[table_name] = fetched
+    return set() if fetched is None else set(fetched)
+
+
 def _table_exists(engine: Engine, table_name: str) -> bool:
-    return inspect(engine).has_table(table_name)
+    """True if table exists. Uses column catalog cache (no separate has_table)."""
+    # #region agent log
+    t0 = time.perf_counter()
+    _DEBUG_REFLECT_COUNTS["has_table"] += 1
+    # #endregion
+    _column_names(engine, table_name)
+    exists = _engine_schema_cache(engine).get(table_name) is not None
+    # #region agent log
+    _agent_debug_log(
+        "D",
+        "db_utils.py:_table_exists",
+        "table exists via catalog cache",
+        {
+            "table": table_name,
+            "exists": exists,
+            "ms": round((time.perf_counter() - t0) * 1000, 2),
+            "counts": dict(_DEBUG_REFLECT_COUNTS),
+            "dialect": engine.dialect.name,
+        },
+        run_id="post-fix",
+    )
+    # #endregion
+    return exists
 
 
 def _column_exists(engine: Engine, table_name: str, column_name: str) -> bool:
-    if not _table_exists(engine, table_name):
-        return False
-    return column_name in {col["name"] for col in inspect(engine).get_columns(table_name)}
+    return column_name in _column_names(engine, table_name)
 
 
 def _predictions_is_legacy(engine: Engine) -> bool:
     """True when predictions uses the legacy NBA schema (requires spread/probability cols)."""
-    return _table_exists(engine, "predictions") and _column_exists(
-        engine, "predictions", "predicted_spread"
-    )
+    return "predicted_spread" in _column_names(engine, "predictions")
 
 
 def _serialize_feature_snapshot(value: Any) -> Optional[str]:
@@ -319,40 +501,79 @@ def _compute_game_signature(prediction_data: Dict[str, Any]) -> str:
 
 
 def ensure_unified_schema(engine: Engine) -> None:
-    """Create or migrate unified predictions and prediction_options tables."""
+    """Create or migrate unified predictions and prediction_options tables.
+
+    Uses cheap information_schema/PRAGMA lookups (never SQLAlchemy Inspector
+    reflection). On PostgreSQL, skipped unless SCHEMA_AUTO_MIGRATE is enabled
+    — production schema is applied via ``python -m scripts.init_database`` or
+    SQL migrations under migrations/.
+    """
+    # #region agent log
+    t_all = time.perf_counter()
+    counts_before = dict(_DEBUG_REFLECT_COUNTS)
+    auto = schema_auto_migrate(engine)
+    _agent_debug_log(
+        "C",
+        "db_utils.py:ensure_unified_schema",
+        "enter",
+        {
+            "dialect": engine.dialect.name,
+            "auto_migrate": auto,
+            "counts_before": counts_before,
+        },
+        run_id="post-fix",
+    )
+    # #endregion
+    if not auto:
+        # #region agent log
+        _agent_debug_log(
+            "B",
+            "db_utils.py:ensure_unified_schema",
+            "skipped (SCHEMA_AUTO_MIGRATE off for postgres)",
+            {"total_ms": round((time.perf_counter() - t_all) * 1000, 2)},
+            run_id="post-fix",
+        )
+        # #endregion
+        return
+
     is_pg = _is_postgresql(engine)
+    cache = _engine_schema_cache(engine)
 
     with engine.begin() as conn:
-        if not _table_exists(engine, "predictions"):
+        # #region agent log
+        t_tx = time.perf_counter()
+        # #endregion
+        existing_cols = _fetch_column_names_on_connection(conn, engine, "predictions")
+        if existing_cols is None:
             ddl = UNIFIED_PREDICTIONS_DDL_PG if is_pg else UNIFIED_PREDICTIONS_DDL
             conn.execute(text(ddl))
+            existing_cols = _fetch_column_names_on_connection(conn, engine, "predictions") or set()
+            cache["predictions"] = set(existing_cols)
         else:
+            added_any = False
             for col_name, col_type in UNIFIED_PREDICTION_COLUMNS:
-                if not _column_exists(engine, "predictions", col_name):
+                if col_name not in existing_cols:
                     conn.execute(
                         text(f"ALTER TABLE predictions ADD COLUMN {col_name} {col_type}")
                     )
+                    existing_cols.add(col_name)
+                    added_any = True
+            cache["predictions"] = set(existing_cols)
 
-            if _column_exists(engine, "predictions", "game_signature"):
-                conn.execute(
-                    text(
-                        """
-                        DELETE FROM predictions
-                        WHERE prediction_id NOT IN (
-                            SELECT MAX(prediction_id)
-                            FROM predictions
-                            GROUP BY sport, game_date, home_team, away_team
-                        )
-                        """
-                    )
-                )
-
+            # Cheap one-shot backfill only for rows still missing a signature.
+            # Do NOT DELETE duplicates on every web boot — that is a heavy
+            # full-table scan and was a production data-loss risk.
+            if "game_signature" in existing_cols:
+                # #region agent log
+                t_bf = time.perf_counter()
+                # #endregion
                 rows = conn.execute(
                     text(
                         """
                         SELECT prediction_id, sport, game_date, home_team, away_team
                         FROM predictions
                         WHERE game_signature IS NULL
+                        LIMIT 500
                         """
                     )
                 ).mappings().all()
@@ -364,60 +585,69 @@ def ensure_unified_schema(engine: Engine) -> None:
                         ),
                         {"sig": sig, "pid": row["prediction_id"]},
                     )
+                # #region agent log
+                _agent_debug_log(
+                    "E",
+                    "db_utils.py:ensure_unified_schema",
+                    "signature backfill done",
+                    {
+                        "rows": len(rows),
+                        "ms": round((time.perf_counter() - t_bf) * 1000, 2),
+                        "added_columns": added_any,
+                    },
+                    run_id="post-fix",
+                )
+                # #endregion
 
         options_ddl = PREDICTION_OPTIONS_DDL_PG if is_pg else PREDICTION_OPTIONS_DDL
         conn.execute(text(options_ddl))
+        _invalidate_schema_cache(engine, "prediction_options")
 
-        if is_pg:
-            conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS idx_predictions_sport_date "
-                    "ON predictions (sport, game_date)"
-                )
-            )
-            conn.execute(
-                text(
-                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_predictions_game_signature "
-                    "ON predictions (game_signature)"
-                )
-            )
-            conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS idx_predictions_provider_game_id "
-                    "ON predictions (provider_game_id)"
-                )
-            )
-            conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS idx_options_prediction "
-                    "ON prediction_options (prediction_id)"
-                )
-            )
-        else:
-            conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS idx_predictions_sport_date "
-                    "ON predictions (sport, game_date)"
-                )
-            )
-            conn.execute(
-                text(
-                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_predictions_game_signature "
-                    "ON predictions (game_signature)"
-                )
-            )
-            conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS idx_predictions_provider_game_id "
-                    "ON predictions (provider_game_id)"
-                )
-            )
-            conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS idx_options_prediction "
-                    "ON prediction_options (prediction_id)"
-                )
-            )
+        # #region agent log
+        t_idx = time.perf_counter()
+        # #endregion
+        for idx_sql in (
+            "CREATE INDEX IF NOT EXISTS idx_predictions_sport_date "
+            "ON predictions (sport, game_date)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_predictions_game_signature "
+            "ON predictions (game_signature)",
+            "CREATE INDEX IF NOT EXISTS idx_predictions_provider_game_id "
+            "ON predictions (provider_game_id)",
+            "CREATE INDEX IF NOT EXISTS idx_options_prediction "
+            "ON prediction_options (prediction_id)",
+        ):
+            conn.execute(text(idx_sql))
+        # #region agent log
+        _agent_debug_log(
+            "E",
+            "db_utils.py:ensure_unified_schema",
+            "indexes ensured",
+            {
+                "ms": round((time.perf_counter() - t_idx) * 1000, 2),
+                "txn_ms": round((time.perf_counter() - t_tx) * 1000, 2),
+            },
+            run_id="post-fix",
+        )
+        # #endregion
+
+    # #region agent log
+    _agent_debug_log(
+        "B",
+        "db_utils.py:ensure_unified_schema",
+        "exit",
+        {
+            "total_ms": round((time.perf_counter() - t_all) * 1000, 2),
+            "counts_after": dict(_DEBUG_REFLECT_COUNTS),
+            "counts_delta": {
+                k: _DEBUG_REFLECT_COUNTS[k] - counts_before.get(k, 0)
+                for k in _DEBUG_REFLECT_COUNTS
+            },
+            "dialect": engine.dialect.name,
+            "inspect_calls": _DEBUG_REFLECT_COUNTS.get("inspect_calls", 0),
+        },
+        run_id="post-fix",
+    )
+    # #endregion
 
 
 DEFAULT_REVIEWER_ID = "quintin"
@@ -474,11 +704,12 @@ def _split_display_name(name: str) -> tuple[str, str]:
 
 
 def _ensure_reviewer_profile_columns(conn, engine: Engine) -> set[str]:
-    cols = {c["name"] for c in inspect(engine).get_columns("reviewers")}
+    cols = _fetch_column_names_on_connection(conn, engine, "reviewers") or set()
     for col_name, ddl in REVIEWER_PROFILE_COLUMNS:
         if col_name not in cols:
             conn.execute(text(f"ALTER TABLE reviewers ADD COLUMN {col_name} {ddl}"))
             cols.add(col_name)
+    _engine_schema_cache(engine)["reviewers"] = set(cols)
     return cols
 
 

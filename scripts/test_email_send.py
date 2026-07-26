@@ -11,7 +11,10 @@ Optional environment variables:
   SMTP_HOST         — Default: smtp.gmail.com
   SMTP_PORT         — Default: 587  (STARTTLS)
   TEST_EMAIL        — Recipient address; defaults to SMTP_USER
-  DATABASE_URL      — Default: sqlite:///./sports_analytics.db
+  SQLITE_DATABASE_URL — Local SQLite path for this script (preferred when
+                        DATABASE_URL / SUPERBASE_* point at Postgres)
+  DATABASE_URL / SUPERBASE_DATABASE_URL / SUPABASE_DATABASE_URL
+                      — Used only when the resolved URL is SQLite
   FEEDBACK_BASE_URL — Base URL of the running platform
                       Default: http://localhost:8000
 
@@ -35,6 +38,13 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 
+# Path alignment when invoked as `python scripts/test_email_send.py`
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import backend.config  # noqa: F401 — load .env before database URL resolution
+
+from scripts.db_utils import DEFAULT_SQLITE_URL, resolve_database_url
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -52,8 +62,14 @@ TEST_EMAIL = os.getenv("TEST_EMAIL", SMTP_USER)
 FEEDBACK_BASE_URL = os.getenv("FEEDBACK_BASE_URL", "http://localhost:8000").rstrip("/")
 DASHBOARD_LINK = f"{FEEDBACK_BASE_URL}/feedback?reviewer_id={REVIEWER_ID}"
 
-# Derive local SQLite path from DATABASE_URL env var
-_db_url = os.getenv("DATABASE_URL", "sqlite:///./sports_analytics.db")
+# This helper uses sqlite3 against a local file. Prefer SQLITE_DATABASE_URL when
+# the canonical resolver points at Postgres (typical local SUPERBASE setup).
+_resolved = resolve_database_url(default=DEFAULT_SQLITE_URL)
+_db_url = (
+    _resolved
+    if _resolved.startswith("sqlite")
+    else os.getenv("SQLITE_DATABASE_URL", DEFAULT_SQLITE_URL)
+)
 _db_path_str = _db_url.replace("sqlite:///", "")
 DB_PATH = Path(_db_path_str).resolve()
 

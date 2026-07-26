@@ -9,12 +9,23 @@ import sys
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+# Path alignment when invoked as `python scripts/send_weekly_feedback_form.py`
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import backend.config  # noqa: F401 — load .env before database URL resolution
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from scripts.db_utils import create_database_engine, ensure_default_reviewers, sql_bool_true
+from scripts.db_utils import (
+    create_database_engine,
+    ensure_default_reviewers,
+    resolve_database_url,
+    sql_bool_true,
+)
 
 logger = logging.getLogger("weekly_feedback_distribution")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s")
@@ -347,11 +358,14 @@ def send_email(to_email: str, subject: str, html_content: str) -> None:
 
 
 def main() -> None:
-    db_url = os.getenv("DATABASE_URL")
-    base_url = (os.getenv("FEEDBACK_BASE_URL") or "").rstrip("/")
-    if not db_url:
-        logger.error("DATABASE_URL is required.")
+    try:
+        db_url = resolve_database_url(default=None, required=True)
+    except RuntimeError:
+        logger.error(
+            "SUPABASE_DATABASE_URL, SUPERBASE_DATABASE_URL, or DATABASE_URL is required."
+        )
         sys.exit(1)
+    base_url = (os.getenv("FEEDBACK_BASE_URL") or "").rstrip("/")
     if not base_url:
         logger.error("FEEDBACK_BASE_URL is required.")
         sys.exit(1)

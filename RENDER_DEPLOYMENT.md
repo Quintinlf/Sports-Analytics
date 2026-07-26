@@ -15,6 +15,7 @@
 |---|---|
 | **Runtime** | Python 3 |
 | **Build Command** | `pip install -r requirements-web.txt` |
+| **Pre-Deploy Command** | `python -m scripts.init_database` |
 | **Start Command** | `uvicorn backend.main:app --host 0.0.0.0 --port $PORT` |
 | **Health Check Path** | `/feedback` |
 
@@ -23,6 +24,7 @@
 | Variable | Value |
 |---|---|
 | `DATABASE_URL` | Internal connection string from Render PostgreSQL (or external URL for GitHub Actions) |
+| `SCHEMA_AUTO_MIGRATE` | `false` on production web (default for Postgres). Schema is applied by the pre-deploy command, not on every boot. |
 | `FEEDBACK_BASE_URL` | `https://<your-service>.onrender.com` |
 | `SMTP_HOST` | `smtp.gmail.com` |
 | `SMTP_PORT` | `587` |

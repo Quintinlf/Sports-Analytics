@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from sqlalchemy import text
 
 from backend.db import DATABASE_URL, get_db_session, engine, require_engine
-from backend.models import Base, AnalystFeedback, FeatureSuggestion
+from backend.models import AnalystFeedback, FeatureSuggestion
 from backend.routes.feedback import router as feedback_router, init_platform
 from scripts.db_utils import log_startup_database_diagnostics
 from backend.schemas import (
@@ -281,8 +281,9 @@ def _init_db() -> None:
     print("STARTUP _init_db called", flush=True)
     require_engine()
     log_startup_database_diagnostics(engine, DATABASE_URL)
-    Base.metadata.create_all(bind=engine)
-    # Seed predictions + create new review tables
+    # Schema DDL: SQLite auto-migrates inside init_platform; PostgreSQL production
+    # skips runtime CREATE/ALTER (SCHEMA_AUTO_MIGRATE default false) — apply via
+    # `python -m scripts.init_database` or migrations/ during deploy.
     init_platform(engine)
 
 

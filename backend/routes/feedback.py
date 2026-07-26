@@ -33,8 +33,10 @@ from scripts.db_utils import (
     ensure_default_reviewers,
     ensure_unified_schema,
     insert_prediction,
+    schema_auto_migrate,
     sql_bool_true,
     sql_case_bool_true,
+    _column_names,
     _split_display_name,
     _ensure_reviewer_profile_columns,
     _backfill_reviewer_names,
@@ -523,7 +525,7 @@ def _require_admin(x_admin_key: Optional[str]) -> None:
 
 def _migrate_platform_columns(db_engine) -> None:
     with db_engine.begin() as conn:
-        q_cols = {c["name"] for c in sa_inspect(db_engine).get_columns("analyst_questions")}
+        q_cols = _column_names(db_engine, "analyst_questions")
         for col_name, ddl in [
             ("knowledge_area", "TEXT"),
             ("featured", "BOOLEAN DEFAULT FALSE"),
@@ -531,15 +533,15 @@ def _migrate_platform_columns(db_engine) -> None:
             if col_name not in q_cols:
                 conn.execute(text(f"ALTER TABLE analyst_questions ADD COLUMN {col_name} {ddl}"))
 
-        a_cols = {c["name"] for c in sa_inspect(db_engine).get_columns("analyst_answers")}
+        a_cols = _column_names(db_engine, "analyst_answers")
         if "knowledge_area" not in a_cols:
             conn.execute(text("ALTER TABLE analyst_answers ADD COLUMN knowledge_area TEXT"))
 
-        pr_cols = {c["name"] for c in sa_inspect(db_engine).get_columns("prediction_reviews")}
+        pr_cols = _column_names(db_engine, "prediction_reviews")
         if "primary_decision_variable" not in pr_cols:
             conn.execute(text("ALTER TABLE prediction_reviews ADD COLUMN primary_decision_variable TEXT"))
 
-        pref_cols = {c["name"] for c in sa_inspect(db_engine).get_columns("reviewer_preferences")}
+        pref_cols = _column_names(db_engine, "reviewer_preferences")
         if "email_days" not in pref_cols:
             conn.execute(text("ALTER TABLE reviewer_preferences ADD COLUMN email_days TEXT"))
 
@@ -593,35 +595,130 @@ def _seed_research_questions(db_engine) -> None:
 
 
 def init_platform(db_engine) -> None:
-    """Initialize platform: create tables, run migrations, seed demo data if empty.
+    """Initialize platform tables/seeds when SCHEMA_AUTO_MIGRATE allows it.
+
+    On PostgreSQL production (default), schema DDL is skipped at web startup —
+    apply schema via ``python -m scripts.init_database`` or SQL migrations.
+    SQLite / SCHEMA_AUTO_MIGRATE=true keep local auto-migrate behavior.
 
     Live prediction ingestion is handled separately by scripts/cron_daily_predictions.py
     so the web service does not require ML dependencies at startup.
     """
     logger.info("Initializing feedback platform...")
-    
-    Base.metadata.create_all(bind=db_engine)
-    ensure_unified_schema(db_engine)
+    # #region agent log
+    import json as _json
+    import time as _time
+    from pathlib import Path as _Path
 
-    with db_engine.begin() as conn:
-        _ensure_reviewer_profile_columns(conn, db_engine)
-        _backfill_reviewer_names(conn)
+    _dbg_path = _Path(__file__).resolve().parents[2] / "debug-968447.log"
 
-    ensure_default_reviewers(db_engine)
-    _migrate_platform_columns(db_engine)
-    _seed_onboarding_questions(db_engine)
-    _seed_research_questions(db_engine)
+    def _dbg(hid: str, msg: str, data: dict | None = None) -> None:
+        try:
+            with open(_dbg_path, "a", encoding="utf-8") as fh:
+                fh.write(
+                    _json.dumps(
+                        {
+                            "sessionId": "968447",
+                            "runId": "post-fix",
+                            "hypothesisId": hid,
+                            "location": "feedback.py:init_platform",
+                            "message": msg,
+                            "data": data or {},
+                            "timestamp": int(_time.time() * 1000),
+                        },
+                        default=str,
+                    )
+                    + "\n"
+                )
+        except Exception:
+            pass
 
-    with db_engine.begin() as conn:
-        outcome_cols = [c["name"] for c in sa_inspect(db_engine).get_columns("review_outcomes")]
-        for ddl in [
-            ("structured_explanation", "TEXT"),
-            ("factor_tags", "TEXT"),
-            ("should_be_feature", "BOOLEAN"),
-            ("importance", "INTEGER"),
-        ]:
-            if ddl[0] not in outcome_cols:
-                conn.execute(text(f"ALTER TABLE review_outcomes ADD COLUMN {ddl[0]} {ddl[1]}"))
+    _t0 = _time.perf_counter()
+    _auto = schema_auto_migrate(db_engine)
+    _dbg(
+        "B",
+        "init_platform enter",
+        {"dialect": db_engine.dialect.name, "auto_migrate": _auto},
+    )
+    # #endregion
+
+    if _auto:
+        Base.metadata.create_all(bind=db_engine)
+        # #region agent log
+        _dbg("B", "after create_all", {"ms": round((_time.perf_counter() - _t0) * 1000, 2)})
+        # #endregion
+        ensure_unified_schema(db_engine)
+        # #region agent log
+        _dbg(
+            "B",
+            "after ensure_unified_schema",
+            {"ms": round((_time.perf_counter() - _t0) * 1000, 2)},
+        )
+        # #endregion
+
+        with db_engine.begin() as conn:
+            _ensure_reviewer_profile_columns(conn, db_engine)
+            _backfill_reviewer_names(conn)
+
+        ensure_default_reviewers(db_engine)
+        # #region agent log
+        _t_mig = _time.perf_counter()
+        # #endregion
+        _migrate_platform_columns(db_engine)
+        # #region agent log
+        _dbg(
+            "B",
+            "after _migrate_platform_columns",
+            {"ms": round((_time.perf_counter() - _t_mig) * 1000, 2)},
+        )
+        # #endregion
+
+        with db_engine.begin() as conn:
+            # #region agent log
+            _t_out = _time.perf_counter()
+            # #endregion
+            outcome_cols = _column_names(db_engine, "review_outcomes")
+            # #region agent log
+            _dbg(
+                "B",
+                "review_outcomes column lookup",
+                {
+                    "ms": round((_time.perf_counter() - _t_out) * 1000, 2),
+                    "col_count": len(outcome_cols),
+                },
+            )
+            # #endregion
+            for ddl in [
+                ("structured_explanation", "TEXT"),
+                ("factor_tags", "TEXT"),
+                ("should_be_feature", "BOOLEAN"),
+                ("importance", "INTEGER"),
+            ]:
+                if ddl[0] not in outcome_cols:
+                    conn.execute(text(f"ALTER TABLE review_outcomes ADD COLUMN {ddl[0]} {ddl[1]}"))
+
+        _seed_onboarding_questions(db_engine)
+        _seed_research_questions(db_engine)
+    else:
+        logger.info(
+            "SCHEMA_AUTO_MIGRATE disabled for %s — skipping runtime schema DDL "
+            "(use python -m scripts.init_database or migrations/).",
+            db_engine.dialect.name,
+        )
+        # #region agent log
+        _dbg("B", "skipped schema DDL (production path)", {})
+        # #endregion
+
+    # #region agent log
+    _dbg(
+        "B",
+        "init_platform schema phase done",
+        {
+            "total_ms": round((_time.perf_counter() - _t0) * 1000, 2),
+            "auto_migrate": _auto,
+        },
+    )
+    # #endregion
 
     # Demo predictions are dev-only: gated behind ENABLE_DEMO_PREDICTIONS so a
     # production deploy never has synthetic Yankees/Lakers/Man City rows
@@ -1136,7 +1233,7 @@ def debug_predictions(
     """Return diagnostic counts, latest predictions, and recent pipeline runs."""
     _require_admin(x_admin_key)
     with get_db_session() as session:
-        cols = [c["name"] for c in sa_inspect(engine).get_columns("predictions")]
+        cols = _column_names(engine, "predictions")
         has_prediction_status = "prediction_status" in cols
         has_model_name = "model_name" in cols
         has_data_source = "data_source" in cols

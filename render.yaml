@@ -6,6 +6,8 @@ services:
     name: sports-analytics
     runtime: python
     buildCommand: pip install -r requirements-web.txt
+    # Apply ORM + predictions schema once per deploy (not on every web boot).
+    preDeployCommand: python -m scripts.init_database
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /feedback
     envVars:
@@ -13,6 +15,9 @@ services:
         fromDatabase:
           name: sports-analytics-db
           property: connectionString
+      # Production web process skips runtime CREATE/ALTER (see schema_auto_migrate).
+      - key: SCHEMA_AUTO_MIGRATE
+        value: "false"
       - key: FEEDBACK_BASE_URL
         sync: false
       - key: SMTP_HOST

@@ -14,11 +14,13 @@ from typing import Any, Dict, List
 # Ensure repo root is on sys.path when invoked as `python scripts/generate_weekly_report.py`
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import backend.config  # noqa: F401 — load .env before database URL resolution
+
 import pandas as pd
 from sqlalchemy import text
 
 from reports.weekly_email_template import render_weekly_report
-from scripts.db_utils import create_database_engine
+from scripts.db_utils import create_database_engine, resolve_database_url
 from data.sport_config import get_feedback_categories, get_weekly_feature_hints
 
 SPORT = "MLB"
@@ -178,7 +180,7 @@ def _derive_feature_targets(df: pd.DataFrame, failures: List[Dict[str, Any]]) ->
 
 def main() -> int:
     try:
-        database_url = os.getenv("DATABASE_URL") or "sqlite:///./sports_analytics.db"
+        database_url = resolve_database_url()
         feedback_url = _require_env("FEEDBACK_FORM_URL", "http://localhost:8000/")
         engine = create_database_engine(database_url)
 
