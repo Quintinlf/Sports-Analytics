@@ -1463,20 +1463,77 @@ def get_prediction(prediction_id: int) -> Dict[str, Any]:
     return d
 
 
+def _normalize_reviewer_name(name: str) -> str:
+    """Case-insensitive identity key: trim + collapse whitespace + lowercase."""
+    return " ".join((name or "").strip().split()).lower()
+
+
+def _normalize_reviewer_email(email: Optional[str]) -> Optional[str]:
+    e = (email or "").strip().lower()
+    return e or None
+
+
+def _find_reviewer_by_email(session, email: str) -> Optional[str]:
+    row = session.execute(
+        text(
+            """
+            SELECT reviewer_id FROM reviewers
+            WHERE email IS NOT NULL AND lower(email) = :email
+            ORDER BY created_at ASC
+            LIMIT 1
+            """
+        ),
+        {"email": email},
+    ).mappings().first()
+    return row["reviewer_id"] if row else None
+
+
+def _find_reviewer_by_normalized_name(session, normalized_name: str) -> Optional[str]:
+    """Prefer the oldest row that already has an email (canonical account)."""
+    row = session.execute(
+        text(
+            """
+            SELECT reviewer_id FROM reviewers
+            WHERE lower(trim(name)) = :n
+            ORDER BY
+              CASE
+                WHEN email IS NOT NULL AND trim(email) != '' THEN 0
+                ELSE 1
+              END,
+              created_at ASC
+            LIMIT 1
+            """
+        ),
+        {"n": normalized_name},
+    ).mappings().first()
+    return row["reviewer_id"] if row else None
+
+
 @router.post("/reviewers")
 def get_or_create_reviewer(payload: ReviewerRequest) -> Dict[str, Any]:
-    name = payload.name.strip()
+    name = " ".join((payload.name or "").strip().split())
     if not name:
         raise HTTPException(status_code=400, detail="Name cannot be empty")
 
-    email = (payload.email or "").strip() or None
+    email = _normalize_reviewer_email(payload.email)
     custom_id = (payload.reviewer_id or "").strip() or None
+    normalized_name = _normalize_reviewer_name(name)
     first_name, last_name = _split_display_name(name)
     ts = datetime.utcnow().isoformat()
 
     with get_db_session() as session:
-        # If a custom reviewer_id is provided, upsert by that ID
-        if custom_id:
+        reviewer_id: Optional[str] = None
+        created = False
+
+        # Hierarchy: email (canonical) → normalized name → create (or custom id).
+        if email:
+            reviewer_id = _find_reviewer_by_email(session, email)
+
+        if reviewer_id is None:
+            reviewer_id = _find_reviewer_by_normalized_name(session, normalized_name)
+
+        if reviewer_id is None and custom_id:
+            # Invite / deep-link upsert by stable id when no email/name match.
             session.execute(
                 text("""
                     INSERT INTO reviewers
@@ -1497,50 +1554,71 @@ def get_or_create_reviewer(payload: ReviewerRequest) -> Dict[str, Any]:
             session.commit()
             reviewer_id = custom_id
             created = False
+        elif reviewer_id is None:
+            reviewer_id = custom_id or str(uuid.uuid4())
+            session.execute(
+                text(
+                    """
+                    INSERT INTO reviewers
+                        (reviewer_id, name, email, first_name, last_name, analyst_role, profile_public, created_at)
+                    VALUES (:rid, :name, :email, :first_name, :last_name, 'analyst', :profile_public, :ts)
+                    """
+                ),
+                {
+                    "rid": reviewer_id, "name": name, "email": email,
+                    "first_name": first_name, "last_name": last_name,
+                    "profile_public": False, "ts": ts,
+                },
+            )
+            session.commit()
+            created = True
         else:
-            existing = session.execute(
-                text("SELECT reviewer_id FROM reviewers WHERE name = :n"),
-                {"n": name},
-            ).mappings().first()
-
-            if existing:
-                reviewer_id = existing["reviewer_id"]
-                if email:
-                    session.execute(
-                        text("UPDATE reviewers SET email = :email "
-                             "WHERE reviewer_id = :rid AND email IS NULL"),
-                        {"email": email, "rid": reviewer_id},
-                    )
-                    session.commit()
-                created = False
-            else:
-                reviewer_id = str(uuid.uuid4())
+            # Attach email / refresh display name on the canonical row.
+            session.execute(
+                text(
+                    """
+                    UPDATE reviewers
+                    SET name = COALESCE(NULLIF(name, ''), :name),
+                        email = COALESCE(email, :email),
+                        first_name = COALESCE(NULLIF(first_name, ''), :first_name),
+                        last_name = COALESCE(NULLIF(last_name, ''), :last_name)
+                    WHERE reviewer_id = :rid
+                    """
+                ),
+                {
+                    "rid": reviewer_id,
+                    "name": name,
+                    "email": email,
+                    "first_name": first_name,
+                    "last_name": last_name,
+                },
+            )
+            # If canonical row has no email yet, set normalized email.
+            if email:
                 session.execute(
                     text(
                         """
-                        INSERT INTO reviewers
-                            (reviewer_id, name, email, first_name, last_name, analyst_role, profile_public, created_at)
-                        VALUES (:rid, :name, :email, :first_name, :last_name, 'analyst', :profile_public, :ts)
+                        UPDATE reviewers
+                        SET email = :email
+                        WHERE reviewer_id = :rid
+                          AND (email IS NULL OR trim(email) = '')
                         """
                     ),
-                    {
-                        "rid": reviewer_id, "name": name, "email": email,
-                        "first_name": first_name, "last_name": last_name,
-                        "profile_public": False, "ts": ts,
-                    },
+                    {"rid": reviewer_id, "email": email},
                 )
-                session.commit()
-                created = True
+            session.commit()
+            created = False
 
         profile = _resolve_reviewer(session, reviewer_id) or {}
         stats = _reviewer_stats(session, reviewer_id)
         history = _reviewer_history(session, reviewer_id)
         preferences = _load_reviewer_preferences(session, reviewer_id)
         custom_sections = _load_custom_sections(session, reviewer_id)
+        display_name = profile.get("name") or name
 
     return {
         "reviewer_id": reviewer_id,
-        "name": name,
+        "name": display_name,
         "created": created,
         "first_name": profile.get("first_name", first_name),
         "last_name": profile.get("last_name", last_name),

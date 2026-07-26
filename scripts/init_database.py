@@ -24,6 +24,7 @@ from backend.db import Base, engine
 import backend.models  # noqa: F401 — register every ORM model with Base.metadata
 from scripts.db_utils import (
     ensure_default_reviewers,
+    ensure_reviewer_email_unique_index,
     ensure_unified_schema,
     resolve_database_url,
 )
@@ -90,6 +91,7 @@ def initialize_database() -> list[str]:
     Base.metadata.create_all(bind=engine)
     ensure_unified_schema(engine)
     ensure_default_reviewers(engine)
+    ensure_reviewer_email_unique_index(engine)
 
     # Keep question catalogs in sync on deploy (same UPSERTs as web init_platform).
     try:

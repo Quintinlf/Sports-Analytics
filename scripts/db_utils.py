@@ -817,6 +817,36 @@ def _seed_trusted_analysts(conn, engine: Engine, ts: str) -> None:
             )
 
 
+def ensure_reviewer_email_unique_index(engine: Engine) -> None:
+    """Enforce one reviewer row per email (case-insensitive).
+
+    Partial index so NULL emails remain allowed for unnamed/local seed rows.
+    """
+    if not _table_exists(engine, "reviewers"):
+        return
+    with engine.begin() as conn:
+        if _is_postgresql(engine):
+            conn.execute(
+                text(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS unique_reviewer_email
+                    ON reviewers (lower(email))
+                    WHERE email IS NOT NULL AND btrim(email) <> ''
+                    """
+                )
+            )
+        else:
+            conn.execute(
+                text(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS unique_reviewer_email
+                    ON reviewers (email COLLATE NOCASE)
+                    WHERE email IS NOT NULL AND trim(email) != ''
+                    """
+                )
+            )
+
+
 def ensure_default_reviewers(engine: Engine) -> None:
     """Seed beta reviewer rows for automation paths that skip API startup."""
     import logging
@@ -831,6 +861,7 @@ def ensure_default_reviewers(engine: Engine) -> None:
         cols = _ensure_reviewer_profile_columns(conn, engine)
         if "email" not in cols:
             conn.execute(text("ALTER TABLE reviewers ADD COLUMN email TEXT"))
+            cols.add("email")
 
         existing = conn.execute(
             text(
@@ -879,6 +910,13 @@ def ensure_default_reviewers(engine: Engine) -> None:
             )
             reviewer_id = DEFAULT_REVIEWER_ID
 
+    # Outside the seed transaction so a unique-index failure cannot roll back seeds.
+    try:
+        ensure_reviewer_email_unique_index(engine)
+    except Exception as exc:
+        logger.warning("Could not ensure unique_reviewer_email index: %s", exc)
+
+    with engine.begin() as conn:
         if _table_exists(engine, "reviewer_preferences"):
             conn.execute(
                 text(

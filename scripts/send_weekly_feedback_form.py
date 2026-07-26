@@ -104,6 +104,35 @@ def already_sent(
     return row is not None
 
 
+def email_already_claimed_for_window(
+    engine: Engine,
+    email: str,
+    email_type: str,
+    send_date: str,
+) -> bool:
+    """True if any reviewer already claimed this window for the same address.
+
+    Defense in depth against duplicate reviewer rows sharing one inbox.
+    """
+    key = (email or "").strip().lower()
+    if not key:
+        return False
+    with engine.begin() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT 1 FROM email_send_log
+                WHERE email_type = :etype
+                  AND send_date = :sdate
+                  AND lower(email) = :email
+                LIMIT 1
+                """
+            ),
+            {"etype": email_type, "sdate": send_date, "email": key},
+        ).first()
+    return row is not None
+
+
 def try_claim_send(
     engine: Engine,
     reviewer_id: str,
@@ -494,10 +523,28 @@ def main(now: Optional[datetime] = None) -> None:
     sent = 0
     failed = 0
     skipped = 0
+    seen_emails: set[str] = set()
     for reviewer in reviewers:
         favorite = reviewer["favorite_sports"][0] if reviewer["favorite_sports"] else "MLB"
         claimed = False
+        email_key = (reviewer.get("email") or "").strip().lower()
         try:
+            # One inbox → one digest per window, even if duplicate reviewer rows exist.
+            if email_key and (
+                email_key in seen_emails
+                or email_already_claimed_for_window(
+                    engine, email_key, EMAIL_TYPE_WEEKLY_DIGEST, send_date
+                )
+            ):
+                skipped += 1
+                logger.info(
+                    "Skipping digest for %s (%s) — email already claimed for window %s",
+                    reviewer["name"],
+                    reviewer["email"],
+                    send_date,
+                )
+                continue
+
             # Claim BEFORE SMTP so overlapping Actions runs cannot double-send.
             claimed = try_claim_send(
                 engine,
@@ -515,6 +562,8 @@ def main(now: Optional[datetime] = None) -> None:
                     send_date,
                 )
                 continue
+            if email_key:
+                seen_emails.add(email_key)
             stats = load_reviewer_stats(engine, reviewer["reviewer_id"])
             upcoming = load_predictions(engine, "SOCCER" if favorite == "FIFA" else favorite, "UPCOMING")
             completed = load_predictions(engine, "SOCCER" if favorite == "FIFA" else favorite, "FINAL")
