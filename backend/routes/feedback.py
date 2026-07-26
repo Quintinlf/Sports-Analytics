@@ -890,7 +890,21 @@ def _explanations(snap: Dict[str, Any]) -> List[Dict[str, Any]]:
             if isinstance(f, dict)
         ]
     if isinstance(snap, dict) and "explanations" in snap:
-        return snap["explanations"]
+        # Legacy demo/NBA/FIFA rows often omit "value" (label+weight only).
+        # Normalize so mobile clients that filter on value still render.
+        out: List[Dict[str, Any]] = []
+        for e in snap["explanations"] or []:
+            if not isinstance(e, dict):
+                continue
+            label = e.get("label", "Factor")
+            out.append(
+                {
+                    "label": label,
+                    "weight": float(e.get("weight", 0.0) or 0.0),
+                    "value": e.get("value") if e.get("value") is not None else label,
+                }
+            )
+        return out
     # Flat numeric dict fallback
     numeric = {k: v for k, v in snap.items()
                if isinstance(v, (int, float)) and k != "confidence_score"}

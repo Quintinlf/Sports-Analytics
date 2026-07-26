@@ -1,11 +1,8 @@
 """FIFA/Soccer Live Predictions Service - integrates with free soccer data sources.
 
-Live fixtures are scoped to major international tournaments (FIFA World Cup,
-UEFA European Championships) rather than domestic club leagues, because
-machine_learning/models/fifa_ensemble.pkl (see training/fifa_trainer.py) is
-trained on national-squad profiles from those exact competitions. A club
-fixture like "Arsenal vs Man City" has no corresponding squad profile and
-would always fall back anyway.
+Discovery covers club + international competitions via data.competitions.
+Only fixtures with available national-squad model inputs receive AI scores;
+others are stored as schedule-only rows (no fabricated predictions).
 """
 from __future__ import annotations
 
@@ -19,6 +16,12 @@ from data.nba_predictions_service import OffSeasonStrategy
 from data.explanation_engine import build_snapshot, explain_fifa_prediction
 from data.demo_data import demo_predictions_enabled
 from data.prediction_errors import ModelUnavailableError
+from data.competitions.soccer_schedule import SoccerScheduleProvider
+from data.competitions.types import PredictPolicy
+
+SCHEDULE_ONLY_NOTE = (
+    "Fixture discovered, but model unavailable for this competition."
+)
 
 logger = logging.getLogger(__name__)
 
@@ -114,47 +117,22 @@ class FIFALivePredictionService:
             return self.handle_off_season()
 
     def _fetch_free_fixtures(self) -> List[Dict[str, Any]]:
-        """Fetch fixtures using a free/fallback source.
-
-        Scoped to the two international competitions fifa_ensemble.pkl was
-        trained on (see training/fifa_trainer.py COMPETITIONS) — thesportsdb
-        league IDs confirmed directly against the live API.
-        """
+        """Discover fixtures via competition catalog (club + international)."""
         try:
-            league_ids = [
-                ("FIFA World Cup", "4429"),
-                ("UEFA European Championships", "4502"),
-            ]
-            fixtures: List[Dict[str, Any]] = []
-            for league_name, league_id in league_ids:
-                url = f"{self.api_base}/eventsnextleague.php?id={league_id}"
-                resp = requests.get(url, timeout=15)
-                if resp.status_code != 200:
-                    continue
-                payload = resp.json()
-                events = payload.get("events") or []
-                for ev in events[:6]:
-                    fixtures.append(
-                        {
-                            "id": ev.get("idEvent"),
-                            "league": league_name,
-                            "home_team": ev.get("strHomeTeam"),
-                            "away_team": ev.get("strAwayTeam"),
-                            "utc_date": ev.get("dateEvent"),
-                        }
-                    )
-            return fixtures
+            provider = SoccerScheduleProvider(api_base=self.api_base)
+            return provider.fetch_as_fifa_dicts()
         except Exception as e:
-            logger.warning(f"Error fetching fixtures: {e}")
+            logger.warning("Error fetching soccer fixtures: %s", e)
             return []
 
     def build_prediction_rows(
         self, fixtures: List[Dict[str, Any]], model_bundle: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
-        """Transform fixture data into prediction DB shape using the real
-        trained model. Fixtures where either squad has no profile on file
-        (e.g. didn't qualify for a tracked tournament) are skipped with a
-        logged warning rather than filled with a guessed prediction.
+        """Transform fixtures into DB rows.
+
+        full_model competitions with squad profiles → AI prediction.
+        schedule_only competitions, or missing model inputs → schedule-only
+        row (is_fallback=True). Never fabricates an AI winner.
         """
         prediction_rows = []
         model = model_bundle["model"]
@@ -163,14 +141,25 @@ class FIFALivePredictionService:
             try:
                 home_team = fixture.get("home_team", "Unknown")
                 away_team = fixture.get("away_team", "Unknown")
+                policy = self._fixture_policy(fixture)
+
+                if policy == PredictPolicy.SCHEDULE_ONLY:
+                    prediction_rows.append(
+                        self._schedule_only_row(fixture, home_team, away_team)
+                    )
+                    continue
 
                 proba: Optional[Dict[str, float]] = model.predict_match(
                     squad_profiles, home_team, away_team
                 )
                 if proba is None:
-                    logger.warning(
-                        "Skipping %s vs %s: no squad profile on file for one or both teams.",
-                        home_team, away_team,
+                    logger.info(
+                        "Schedule-only for %s vs %s: model unavailable for this competition.",
+                        home_team,
+                        away_team,
+                    )
+                    prediction_rows.append(
+                        self._schedule_only_row(fixture, home_team, away_team)
                     )
                     continue
 
@@ -186,6 +175,7 @@ class FIFALivePredictionService:
                     "model_home_win_probability": round(proba["HOME_WIN"], 4),
                     "model_draw_probability": round(proba["DRAW"], 4),
                     "model_away_win_probability": round(proba["AWAY_WIN"], 4),
+                    "schedule_only": False,
                 }
                 squad_maps = model.squad_metric_maps(squad_profiles, home_team, away_team)
                 home_metrics, away_metrics = squad_maps if squad_maps else ({}, {})
@@ -215,7 +205,9 @@ class FIFALivePredictionService:
                     "sport": "SOCCER",
                     "league": fixture.get("league", "International"),
                     "provider_game_id": str(fixture.get("id") or ""),
-                    "game_date": str(fixture.get("utc_date", datetime.today().strftime("%Y-%m-%d")).split("T")[0]),
+                    "game_date": str(
+                        fixture.get("utc_date", datetime.today().strftime("%Y-%m-%d"))
+                    ).split("T")[0],
                     "home_team": home_team,
                     "away_team": away_team,
                     "predicted_winner": predicted_winner,
@@ -242,6 +234,66 @@ class FIFALivePredictionService:
 
         logger.info(f"Built {len(prediction_rows)} FIFA/Soccer prediction rows")
         return prediction_rows
+
+    @staticmethod
+    def _fixture_policy(fixture: Dict[str, Any]) -> PredictPolicy:
+        raw = fixture.get("predict_policy")
+        if isinstance(raw, PredictPolicy):
+            return raw
+        if isinstance(raw, str):
+            try:
+                return PredictPolicy(raw)
+            except ValueError:
+                pass
+        return PredictPolicy.FULL_MODEL
+
+    def _schedule_only_row(
+        self,
+        fixture: Dict[str, Any],
+        home_team: str,
+        away_team: str,
+    ) -> Dict[str, Any]:
+        """Persist a discovered fixture without fabricating an AI prediction."""
+        feature_snapshot = build_snapshot(
+            sport="FIFA",
+            data_source="thesportsdb",
+            is_fallback=True,
+            confidence_score=0.0,
+            explanations=[],
+            metrics={
+                "schedule_only": True,
+                "offseason_notice": SCHEDULE_ONLY_NOTE,
+                "discovery_note": SCHEDULE_ONLY_NOTE,
+            },
+            why_factors=[],
+            risk_factors=[],
+        )
+        return {
+            "sport": "SOCCER",
+            "league": fixture.get("league", "International"),
+            "provider_game_id": str(fixture.get("id") or ""),
+            "game_date": str(
+                fixture.get("utc_date", datetime.today().strftime("%Y-%m-%d"))
+            ).split("T")[0],
+            "home_team": home_team,
+            "away_team": away_team,
+            "predicted_winner": "Scheduled",
+            "win_probability": 0.0,
+            "confidence_level": "N/A",
+            "bet_type": "Moneyline",
+            "bet_units": 0.0,
+            "bet_recommendation": "Scheduled fixture — no AI prediction",
+            "feature_snapshot": json.dumps(feature_snapshot),
+            "model_name": None,
+            "data_source": "thesportsdb",
+            "is_fallback": True,
+            "prediction_status": "UPCOMING",
+            "actual_home_score": None,
+            "actual_away_score": None,
+            "actual_winner": None,
+            "correct": None,
+            "created_at": datetime.utcnow().isoformat(),
+        }
 
     def handle_off_season(self) -> List[Dict[str, Any]]:
         """Return empty when no fixtures available.

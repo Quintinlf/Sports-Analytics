@@ -8,13 +8,10 @@ from enum import Enum
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-import pandas as pd
-from nba_api.stats.endpoints import leaguegamefinder
-
-from data.nba_loader import fetch_upcoming_games as fetch_nba_raw_games
 from data.nba_live_features import build_nba_live_features
 from data.explanation_engine import build_snapshot, explain_nba_prediction
 from data.prediction_errors import ModelUnavailableError
+from data.competitions.nba_schedule import NbaScheduleProvider
 
 logger = logging.getLogger(__name__)
 
@@ -109,18 +106,18 @@ class NBALivePredictionService:
 
         try:
             logger.info("Fetching live NBA games via nba_api...")
-            raw_games = fetch_nba_raw_games()
+            raw_games = NbaScheduleProvider().fetch_as_nba_dicts()
 
             if not raw_games:
-                logger.info("No upcoming NBA games found")
-                return self._fetch_recent_final_games(ensemble, limit=8) or self.handle_off_season()
+                logger.info("No upcoming NBA games found (offseason or empty scoreboard)")
+                return self.handle_off_season()
 
             return self.build_prediction_rows(raw_games, ensemble)
         except ModelUnavailableError:
             raise
         except Exception as e:
             logger.error(f"Error fetching live NBA data: {e}", exc_info=True)
-            return self._fetch_recent_final_games(ensemble, limit=8) or self.handle_off_season()
+            return self.handle_off_season()
 
     def build_prediction_rows(self, raw_games: List[Dict[str, Any]], ensemble) -> List[Dict[str, Any]]:
         """Transform NBA loader output into prediction DB shape using the
@@ -159,84 +156,15 @@ class NBALivePredictionService:
         return prediction_rows
 
     def handle_off_season(self) -> List[Dict[str, Any]]:
-        """Return empty or alternative data based on off-season strategy."""
-        logger.info(f"NBA off-season detected. Applying strategy: {self.strategy.value}")
-        if self.strategy == OffSeasonStrategy.HISTORICAL:
-            logger.info("Would fetch historical data (not yet implemented)")
-            return []
-        return []
+        """Return empty when scoreboard has no upcoming games.
 
-    def _fetch_recent_final_games(self, ensemble, limit: int = 8) -> List[Dict[str, Any]]:
-        """Fallback to recent completed NBA games when no upcoming games exist.
-
-        Runs the real ensemble model against each team's pre-game state (as
-        of that game's date, using only strictly-earlier history) so the
-        displayed prediction is a genuine forecast rather than derived from
-        the already-known result. actual_* / correct columns are filled from
-        the real final score for review purposes.
+        Historical FINAL games are never exposed as upcoming predictions.
         """
-        season_candidates = []
-        year = datetime.utcnow().year
-        season_candidates.append(f"{year-1}-{str(year)[-2:]}")
-        season_candidates.append(f"{year-2}-{str(year-1)[-2:]}")
-
-        games_df: Optional[pd.DataFrame] = None
-        for season in season_candidates:
-            try:
-                finder = leaguegamefinder.LeagueGameFinder(
-                    season_nullable=season,
-                    season_type_nullable="Regular Season",
-                    league_id_nullable="00",
-                    timeout=30,
-                )
-                df = finder.get_data_frames()[0]
-                if df is not None and not df.empty:
-                    games_df = df
-                    break
-            except Exception as e:
-                logger.warning(f"Historical NBA fetch failed for season {season}: {e}")
-
-        if games_df is None or games_df.empty:
-            return []
-
-        df = games_df.copy()
-        df["GAME_DATE"] = pd.to_datetime(df["GAME_DATE"], errors="coerce")
-        df = df.dropna(subset=["GAME_DATE"]).sort_values("GAME_DATE", ascending=False)
-
-        rows: List[Dict[str, Any]] = []
-        seen = set()
-        for game_id, group in df.groupby("GAME_ID", sort=False):
-            if game_id in seen or len(rows) >= limit:
-                continue
-
-            home = group[group["MATCHUP"].astype(str).str.contains("vs\\.", regex=True)]
-            away = group[group["MATCHUP"].astype(str).str.contains("@", regex=False)]
-            if home.empty or away.empty:
-                continue
-
-            home_row = home.iloc[0]
-            away_row = away.iloc[0]
-            home_score = int(home_row.get("PTS", 0) or 0)
-            away_score = int(away_row.get("PTS", 0) or 0)
-            actual_winner = str(home_row["TEAM_NAME"]) if home_score >= away_score else str(away_row["TEAM_NAME"])
-            game_date = home_row["GAME_DATE"].strftime("%Y-%m-%d")
-
-            row = self._predict_one(
-                ensemble=ensemble,
-                home_team=str(home_row["TEAM_NAME"]),
-                away_team=str(away_row["TEAM_NAME"]),
-                game_date=game_date,
-                provider_game_id=str(game_id),
-                prediction_status="FINAL",
-                actual_home_score=home_score,
-                actual_away_score=away_score,
-                actual_winner=actual_winner,
-            )
-            if row is not None:
-                rows.append(row)
-            seen.add(game_id)
-
-        return rows
+        logger.info(
+            "NBA off-season / empty upcoming schedule. Strategy=%s (no FINAL fallback)",
+            self.strategy.value,
+        )
+        return []
 
     def _predict_one(
         self,

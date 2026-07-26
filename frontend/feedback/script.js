@@ -33,6 +33,17 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+/** True when row is a discovered fixture without an AI model score. */
+function isScheduleOnlyPrediction(pred) {
+  if (!pred) return false;
+  if (pred.metrics && pred.metrics.schedule_only) return true;
+  if (String(pred.predicted_winner || "").toLowerCase() === "scheduled") return true;
+  if (String(pred.confidence_level || "").toUpperCase() === "N/A" && pred.is_fallback) {
+    return true;
+  }
+  return false;
+}
+
 function sanitizeHtml(html) {
   if (typeof DOMPurify !== "undefined") {
     return DOMPurify.sanitize(html, {
@@ -690,6 +701,7 @@ async function loadPredictions() {
     teams.appendChild(document.createTextNode(` ${p.home_team}`));
     tile.appendChild(teams);
 
+    const scheduleOnly = isScheduleOnlyPrediction(p);
     const dateRow = document.createElement("div");
     dateRow.className = "game-date";
     const dot = document.createElement("span");
@@ -697,8 +709,13 @@ async function loadPredictions() {
     dateRow.appendChild(dot);
     dateRow.appendChild(document.createTextNode(` ${p.game_date} · `));
     const conf = document.createElement("span");
-    conf.className = `conf-badge ${(p.confidence_level || "low").toLowerCase()}`;
-    conf.textContent = p.confidence_level || "";
+    if (scheduleOnly) {
+      conf.className = "conf-badge schedule-only";
+      conf.textContent = "Scheduled";
+    } else {
+      conf.className = `conf-badge ${(p.confidence_level || "low").toLowerCase()}`;
+      conf.textContent = p.confidence_level || "";
+    }
     dateRow.appendChild(conf);
     tile.appendChild(dateRow);
 
@@ -733,7 +750,8 @@ async function selectPrediction(id, tileEl) {
 // AI card
 // ---------------------------------------------------------------------------
 function isMeaningfulExplanation(e) {
-  const v = e?.value;
+  // Accept legacy rows that only have label/weight (no value/detail).
+  const v = e?.value ?? e?.detail ?? e?.label;
   if (v === null || v === undefined) return false;
   const s = String(v).trim();
   if (!s || s === "—" || s === "-" || s === "–") return false;
@@ -810,29 +828,45 @@ function renderAICard(pred) {
     if (pred.created_at) parts.push(`predicted ${pred.created_at}`);
     provenanceEl.textContent = parts.join(" · ");
   }
+  const scheduleOnly = isScheduleOnlyPrediction(pred);
+  const kindLabel = document.getElementById("prediction-kind-label");
+  if (kindLabel) {
+    kindLabel.textContent = scheduleOnly ? "Scheduled fixture" : "AI Predicts";
+  }
+
   const offseason = document.getElementById("offseason-banner");
-  if (pred.is_fallback) {
+  if (scheduleOnly || pred.is_fallback) {
     offseason.style.display = "block";
     offseason.textContent = pred.offseason_notice
-      || "Not a live model prediction — demo/fallback data.";
+      || (scheduleOnly
+        ? "Fixture discovered, but model unavailable for this competition."
+        : "Not a live model prediction — demo/fallback data.");
   } else {
     offseason.style.display = "none";
     offseason.textContent = "";
   }
 
   // Winner + confidence
-  document.getElementById("ai-winner").textContent = pred.predicted_winner;
-  const confPct = Math.round((pred.confidence_pct || 0.5) * 100);
-  document.getElementById("conf-pct-label").textContent = confPct + "%";
+  document.getElementById("ai-winner").textContent = scheduleOnly
+    ? "No AI prediction"
+    : pred.predicted_winner;
+  const confPct = scheduleOnly ? 0 : Math.round((pred.confidence_pct || 0.5) * 100);
+  document.getElementById("conf-pct-label").textContent = scheduleOnly ? "—" : confPct + "%";
   // Animate bar after render
   setTimeout(() => {
     document.getElementById("conf-bar-fill").style.width = confPct + "%";
   }, 50);
 
   // Confidence badge
-  const cl = (pred.confidence_level || "low").toLowerCase();
-  document.getElementById("conf-badge-label").textContent = pred.confidence_level;
-  document.getElementById("conf-badge-label").className = `conf-badge ${cl}`;
+  const confBadge = document.getElementById("conf-badge-label");
+  if (scheduleOnly) {
+    confBadge.textContent = "Scheduled";
+    confBadge.className = "conf-badge schedule-only";
+  } else {
+    const cl = (pred.confidence_level || "low").toLowerCase();
+    confBadge.textContent = pred.confidence_level;
+    confBadge.className = `conf-badge ${cl}`;
+  }
 
   // Prefer why_factors (model-input grounded); fall back to legacy explanations.
   const whyFactors = Array.isArray(pred.why_factors) && pred.why_factors.length
@@ -843,17 +877,24 @@ function renderAICard(pred) {
         strength: e.weight,
       }));
   const whyHeading = document.getElementById("why-ai-heading");
+  const whyBlock = document.getElementById("why-ai-block");
+  const whyEmpty = document.getElementById("why-ai-empty");
   if (whyHeading) {
-    whyHeading.textContent = pred.predicted_winner
-      ? `Why the AI picked ${pred.predicted_winner}`
-      : "Why the AI thinks this";
+    if (scheduleOnly) {
+      whyHeading.textContent = "Schedule only — no AI explanation";
+    } else {
+      whyHeading.textContent = pred.predicted_winner
+        && String(pred.predicted_winner).toLowerCase() !== "scheduled"
+        ? `Why the AI picked ${pred.predicted_winner}`
+        : "Why the AI thinks this";
+    }
   }
   const cardsRoot = document.getElementById("explanation-cards");
   const featureSection = document.getElementById("feature-bars");
   clearChildren(cardsRoot);
-  const meaningfulWhy = whyFactors.filter(f =>
-    isMeaningfulExplanation({ value: f.detail || f.label })
-  );
+  const meaningfulWhy = whyFactors.filter(isMeaningfulExplanation);
+  // Never hide the why block on mobile — empty state is clearer than a missing section.
+  if (whyBlock) whyBlock.style.display = "block";
   if (meaningfulWhy.length) {
     for (const f of meaningfulWhy) {
       const card = document.createElement("div");
@@ -862,9 +903,9 @@ function renderAICard(pred) {
       appendText(card, "div", String(f.detail || f.label), "v");
       cardsRoot.appendChild(card);
     }
-    cardsRoot.parentElement.style.display = "block";
-  } else {
-    cardsRoot.parentElement.style.display = "none";
+    if (whyEmpty) whyEmpty.style.display = "none";
+  } else if (whyEmpty) {
+    whyEmpty.style.display = scheduleOnly ? "none" : "block";
   }
 
   // Relative strength bars from why_factors
