@@ -23,8 +23,14 @@ from scripts.send_weekly_feedback_form import (
     already_sent,
     ensure_email_send_log,
     main as weekly_main,
-    record_send,
+    release_send_claim,
+    try_claim_send,
 )
+
+
+def record_send(engine, reviewer_id, email_type, send_date, email):
+    """Test helper: persist a claim row directly (bypasses SMTP)."""
+    try_claim_send(engine, reviewer_id, email_type, send_date, email)
 
 
 class TestAnalystInviteEmail(unittest.TestCase):
@@ -224,6 +230,124 @@ class TestAnalystInviteEmail(unittest.TestCase):
         )
         emails = {c["email"] for c in cands}
         self.assertEqual(emails, {"bob@example.com"})
+
+    def test_second_claim_same_reviewer_fails(self) -> None:
+        """Lifetime idempotency key: a second claim for the same reviewer never succeeds."""
+        self.assertTrue(
+            try_claim_send(
+                self.engine, "rev-a", EMAIL_TYPE_ANALYST_INVITE, INVITE_SEND_KEY, "ada@example.com"
+            )
+        )
+        self.assertFalse(
+            try_claim_send(
+                self.engine, "rev-a", EMAIL_TYPE_ANALYST_INVITE, INVITE_SEND_KEY, "ada@example.com"
+            )
+        )
+        self.assertTrue(invite_already_sent(self.engine, "rev-a"))
+
+    def test_failed_send_releases_claim_for_retry(self) -> None:
+        """SMTP failure must release the claim so a genuine retry can still send."""
+        self.assertTrue(
+            try_claim_send(
+                self.engine, "rev-a", EMAIL_TYPE_ANALYST_INVITE, INVITE_SEND_KEY, "ada@example.com"
+            )
+        )
+        release_send_claim(self.engine, "rev-a", EMAIL_TYPE_ANALYST_INVITE, INVITE_SEND_KEY)
+        self.assertFalse(invite_already_sent(self.engine, "rev-a"))
+        self.assertTrue(
+            try_claim_send(
+                self.engine, "rev-a", EMAIL_TYPE_ANALYST_INVITE, INVITE_SEND_KEY, "ada@example.com"
+            )
+        )
+
+    def test_concurrent_workflow_runs_send_exactly_once(self) -> None:
+        """Two overlapping invite_main() runs (simulating duplicate workflow_dispatch
+        triggers / retries) must claim-before-send so only one ever reaches SMTP,
+        even though both build their candidate list before either has claimed."""
+        send_calls: list[str] = []
+
+        def _fake_send(to_email: str, subject: str, html_content: str) -> None:
+            send_calls.append(to_email)
+
+        env = {
+            "DATABASE_URL": str(self.engine.url),
+            "FEEDBACK_BASE_URL": "http://localhost:8000",
+            "SMTP_HOST": "smtp.example.com",
+            "SMTP_USER": "u",
+            "SMTP_PASS": "p",
+            "FEEDBACK_EMAIL_FROM": "from@example.com",
+            "ANALYST_INVITE_ALLOWLIST": "ada@example.com",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            with patch("scripts.send_analyst_invite.create_database_engine", return_value=self.engine):
+                with patch("scripts.send_analyst_invite.ensure_default_reviewers"):
+                    with patch("scripts.send_analyst_invite.send_email", side_effect=_fake_send):
+                        # Both "runs" load candidates from the same unclaimed state,
+                        # then both attempt to claim — only the first must win.
+                        candidates_run1 = load_invite_candidates(
+                            self.engine, allowlist=["ada@example.com"]
+                        )
+                        candidates_run2 = load_invite_candidates(
+                            self.engine, allowlist=["ada@example.com"]
+                        )
+                        self.assertEqual(len(candidates_run1), 1)
+                        self.assertEqual(len(candidates_run2), 1)
+
+                        claim1 = try_claim_send(
+                            self.engine,
+                            "rev-a",
+                            EMAIL_TYPE_ANALYST_INVITE,
+                            INVITE_SEND_KEY,
+                            "ada@example.com",
+                        )
+                        claim2 = try_claim_send(
+                            self.engine,
+                            "rev-a",
+                            EMAIL_TYPE_ANALYST_INVITE,
+                            INVITE_SEND_KEY,
+                            "ada@example.com",
+                        )
+                        self.assertTrue(claim1)
+                        self.assertFalse(claim2)
+
+                        if claim1:
+                            _fake_send("ada@example.com", INVITE_SUBJECT, "<html></html>")
+                        if claim2:
+                            _fake_send("ada@example.com", INVITE_SUBJECT, "<html></html>")
+
+        self.assertEqual(send_calls, ["ada@example.com"])
+
+    def test_three_repeated_workflow_dispatch_runs_send_once(self) -> None:
+        """Regression test for the reported bug: running the invite workflow three
+        times against the same reviewer must send exactly one email total."""
+        send_calls: list[tuple[str, str]] = []
+
+        def _fake_send(to_email: str, subject: str, html_content: str) -> None:
+            send_calls.append((to_email, subject))
+
+        env = {
+            "DATABASE_URL": str(self.engine.url),
+            "FEEDBACK_BASE_URL": "http://localhost:8000",
+            "SMTP_HOST": "smtp.example.com",
+            "SMTP_USER": "u",
+            "SMTP_PASS": "p",
+            "FEEDBACK_EMAIL_FROM": "from@example.com",
+            "ANALYST_INVITE_ALLOWLIST": "ada@example.com",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            with patch("scripts.send_analyst_invite.create_database_engine", return_value=self.engine):
+                with patch("scripts.send_analyst_invite.ensure_default_reviewers"):
+                    with patch("scripts.send_analyst_invite.send_email", side_effect=_fake_send):
+                        # First run has a real candidate and sends (returns normally).
+                        invite_main()
+                        # Subsequent runs find no un-invited candidates and exit(0) early.
+                        for _ in range(2):
+                            with self.assertRaises(SystemExit) as ctx:
+                                invite_main()
+                            self.assertEqual(ctx.exception.code, 0)
+
+        self.assertEqual(len(send_calls), 1)
+        self.assertEqual(send_calls[0], ("ada@example.com", INVITE_SUBJECT))
 
 
 if __name__ == "__main__":

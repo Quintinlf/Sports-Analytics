@@ -32,8 +32,9 @@ from scripts.db_utils import create_database_engine, ensure_default_reviewers, r
 from scripts.send_weekly_feedback_form import (
     already_sent,
     ensure_email_send_log,
-    record_send,
+    release_send_claim,
     send_email,
+    try_claim_send,
 )
 
 logger = logging.getLogger("analyst_invite")
@@ -273,23 +274,37 @@ def main() -> None:
 
     sent = failed = skipped = 0
     for reviewer in candidates:
+        claimed = False
         try:
-            if invite_already_sent(engine, reviewer["reviewer_id"]):
-                skipped += 1
-                continue
-            html = render_invite_email(reviewer, base_url)
-            send_email(reviewer["email"], INVITE_SUBJECT, html)
-            record_send(
+            # Claim BEFORE SMTP so retries / overlapping workflow runs cannot double-send.
+            claimed = try_claim_send(
                 engine,
                 reviewer["reviewer_id"],
                 EMAIL_TYPE_ANALYST_INVITE,
                 INVITE_SEND_KEY,
                 reviewer["email"],
             )
+            if not claimed:
+                skipped += 1
+                logger.info(
+                    "Skipping invite for %s (%s) — already claimed/sent",
+                    reviewer["name"],
+                    reviewer["email"],
+                )
+                continue
+            html = render_invite_email(reviewer, base_url)
+            send_email(reviewer["email"], INVITE_SUBJECT, html)
             sent += 1
             logger.info("Sent analyst invite to %s (%s)", reviewer["name"], reviewer["email"])
         except Exception as exc:
             failed += 1
+            if claimed:
+                release_send_claim(
+                    engine,
+                    reviewer["reviewer_id"],
+                    EMAIL_TYPE_ANALYST_INVITE,
+                    INVITE_SEND_KEY,
+                )
             logger.error(
                 "Failed invite to %s (%s): %s",
                 reviewer["name"],
