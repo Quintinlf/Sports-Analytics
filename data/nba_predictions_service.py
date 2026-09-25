@@ -137,6 +137,9 @@ class NBALivePredictionService:
                     home_team=home_team,
                     away_team=away_team,
                     game_date=game_date,
+                    start_time_utc=game.get("game_datetime")
+                    or game.get("gameTimeUTC")
+                    or game_date,
                     provider_game_id=str(game.get("GAME_ID") or ""),
                     prediction_status="UPCOMING",
                 )
@@ -174,6 +177,7 @@ class NBALivePredictionService:
         game_date: str,
         provider_game_id: str,
         prediction_status: str,
+        start_time_utc: Optional[str] = None,
         actual_home_score: Optional[int] = None,
         actual_away_score: Optional[int] = None,
         actual_winner: Optional[str] = None,
@@ -236,6 +240,7 @@ class NBALivePredictionService:
             "sport": "NBA",
             "league": "NBA",
             "game_date": game_date,
+            "start_time_utc": start_time_utc or game_date,
             "home_team": home_team,
             "away_team": away_team,
             "provider_game_id": provider_game_id,
@@ -247,9 +252,11 @@ class NBALivePredictionService:
             "bet_recommendation": f"Lean {predicted_winner}",
             "feature_snapshot": json.dumps(feature_snapshot),
             "model_name": "NBA-Ensemble-v1",
+            "model_version": getattr(ensemble, "version", None),
             "data_source": "nba_api",
             "is_fallback": False,
             "prediction_status": prediction_status,
+            "game_status": "SCHEDULED",
             "actual_home_score": actual_home_score,
             "actual_away_score": actual_away_score,
             "actual_winner": actual_winner,

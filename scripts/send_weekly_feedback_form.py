@@ -236,6 +236,21 @@ def _should_send_today(
     return is_digest_send_day(now=now, email_days=email_days)
 
 
+def _emails_enabled_truthy(value: Any) -> bool:
+    """True only when emails_enabled is explicitly enabled (not NULL/False)."""
+    if value is None:
+        return False
+    return bool(value)
+
+
+def _skip_leader_digest(analyst_role: Any, emails_enabled: Any) -> bool:
+    """Leaders are excluded from weekly digests unless they opt in."""
+    role = (analyst_role or "").strip().lower()
+    if role != "leader":
+        return False
+    return not _emails_enabled_truthy(emails_enabled)
+
+
 def load_reviewers(
     engine,
     allowlist: List[str] | None = None,
@@ -244,7 +259,7 @@ def load_reviewers(
 ) -> List[Dict[str, Any]]:
     sql = text(
         """
-        SELECT r.reviewer_id, r.name, r.email,
+        SELECT r.reviewer_id, r.name, r.email, r.analyst_role,
                rp.favorite_sports, rp.emails_enabled, rp.email_days
         FROM reviewers r
         LEFT JOIN reviewer_preferences rp ON rp.reviewer_id = r.reviewer_id
@@ -257,6 +272,8 @@ def load_reviewers(
     allow = {e.strip().lower() for e in (allowlist or []) if e.strip()}
     pt_weekday = weekday if weekday is not None else pacific_cron_weekday(now)
     for row in rows:
+        if _skip_leader_digest(row.get("analyst_role"), row.get("emails_enabled")):
+            continue
         if row["emails_enabled"] is not None and not bool(row["emails_enabled"]):
             continue
         email = (row["email"] or "").strip()
@@ -609,7 +626,7 @@ def _load_reviewers_ignore_days(
     """Load eligible reviewers without Pacific day gate (WEEKLY_EMAIL_FORCE only)."""
     sql = text(
         """
-        SELECT r.reviewer_id, r.name, r.email,
+        SELECT r.reviewer_id, r.name, r.email, r.analyst_role,
                rp.favorite_sports, rp.emails_enabled
         FROM reviewers r
         LEFT JOIN reviewer_preferences rp ON rp.reviewer_id = r.reviewer_id
@@ -621,6 +638,8 @@ def _load_reviewers_ignore_days(
     allow = {e.strip().lower() for e in (allowlist or []) if e.strip()}
     result = []
     for row in rows:
+        if _skip_leader_digest(row.get("analyst_role"), row.get("emails_enabled")):
+            continue
         if row["emails_enabled"] is not None and not bool(row["emails_enabled"]):
             continue
         email = (row["email"] or "").strip()

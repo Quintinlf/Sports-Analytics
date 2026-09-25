@@ -1,0 +1,115 @@
+{
+ "generated_by": "scripts/build_shuffle_lab.py",
+ "settings": {
+  "trials": 3000,
+  "seed": 20260820,
+  "significance": "position chi-square at alpha 0.05, replicated"
+ },
+ "reports": {
+  "single riffle": {
+   "mean_rising_sequences": 3.0,
+   "order_preservation": 0.7563,
+   "position_test_p_value": 0.0,
+   "significant_fraction": 1.0,
+   "exact_tv": null
+  },
+  "lazy dealer": {
+   "mean_rising_sequences": 4.997,
+   "order_preservation": 0.6297,
+   "position_test_p_value": 0.0,
+   "significant_fraction": 1.0,
+   "exact_tv": null
+  },
+  "casino standard": {
+   "mean_rising_sequences": 12.814,
+   "order_preservation": 0.5448,
+   "position_test_p_value": 1.009543771662403e-64,
+   "significant_fraction": 1.0,
+   "exact_tv": null
+  },
+  "casino deck change": {
+   "mean_rising_sequences": 26.546,
+   "order_preservation": 0.5176,
+   "position_test_p_value": 0.06259707044797756,
+   "significant_fraction": 0.0,
+   "exact_tv": null
+  },
+  "home game": {
+   "mean_rising_sequences": 11.652,
+   "order_preservation": 0.5534,
+   "position_test_p_value": 4.5622562848844036e-125,
+   "significant_fraction": 1.0,
+   "exact_tv": null
+  },
+  "1x riffle": {
+   "mean_rising_sequences": 2.0,
+   "order_preservation": 0.7551,
+   "position_test_p_value": 0.0,
+   "significant_fraction": 1.0,
+   "exact_tv": 1.0
+  },
+  "2x riffle": {
+   "mean_rising_sequences": 4.0,
+   "order_preservation": 0.6307,
+   "position_test_p_value": 0.0,
+   "significant_fraction": 1.0,
+   "exact_tv": 1.0
+  },
+  "3x riffle": {
+   "mean_rising_sequences": 7.951,
+   "order_preservation": 0.5678,
+   "position_test_p_value": 0.0,
+   "significant_fraction": 1.0,
+   "exact_tv": 1.0
+  },
+  "4x riffle": {
+   "mean_rising_sequences": 14.089,
+   "order_preservation": 0.5407,
+   "position_test_p_value": 0.0,
+   "significant_fraction": 1.0,
+   "exact_tv": 0.9999995334313746
+  },
+  "5x riffle": {
+   "mean_rising_sequences": 19.586,
+   "order_preservation": 0.529,
+   "position_test_p_value": 6.830901481005816e-129,
+   "significant_fraction": 1.0,
+   "exact_tv": 0.9237329293962945
+  },
+  "6x riffle": {
+   "mean_rising_sequences": 22.919,
+   "order_preservation": 0.5267,
+   "position_test_p_value": 2.6322628638200543e-22,
+   "significant_fraction": 1.0,
+   "exact_tv": 0.6135495965656284
+  },
+  "7x riffle": {
+   "mean_rising_sequences": 24.645,
+   "order_preservation": 0.5205,
+   "position_test_p_value": 3.911658954100019e-06,
+   "significant_fraction": 0.6,
+   "exact_tv": 0.33406099946815154
+  },
+  "8x riffle": {
+   "mean_rising_sequences": 25.553,
+   "order_preservation": 0.5251,
+   "position_test_p_value": 0.006074029387249513,
+   "significant_fraction": 0.2,
+   "exact_tv": 0.16715864192695742
+  },
+  "10x riffle": {
+   "mean_rising_sequences": 26.283,
+   "order_preservation": 0.5194,
+   "position_test_p_value": 0.029474268993621943,
+   "significant_fraction": 0.05,
+   "exact_tv": 0.042945548921035026
+  },
+  "12x riffle": {
+   "mean_rising_sequences": 26.417,
+   "order_preservation": 0.5153,
+   "position_test_p_value": 0.37816463560537045,
+   "significant_fraction": 0.1,
+   "exact_tv": 0.010754893495669948
+  }
+ }
+}

@@ -23,6 +23,11 @@ from sqlalchemy import text
 from backend.db import DATABASE_URL, get_db_session, engine, require_engine
 from backend.models import AnalystFeedback, FeatureSuggestion
 from backend.routes.feedback import router as feedback_router, init_platform
+from backend.routes.leader import router as leader_router
+from backend.routes.poker import router as poker_router
+from backend.routes.poker_lab import router as poker_lab_router
+from backend.routes.mirror import router as mirror_router
+from backend.routes.lottery import router as lottery_router
 from scripts.db_utils import log_startup_database_diagnostics
 from backend.schemas import (
     FeedbackStatusResponse,
@@ -33,6 +38,9 @@ from backend.schemas import (
 )
 
 _FRONTEND_DIR = Path(__file__).parent.parent / "frontend" / "feedback"
+_POKER_DIR = Path(__file__).parent.parent / "frontend" / "poker"
+_LEADER_DIR = Path(__file__).parent.parent / "frontend" / "leader"
+_HOME_DIR = Path(__file__).parent.parent / "frontend" / "home"
 
 logger = logging.getLogger(__name__)
 
@@ -274,6 +282,11 @@ app.add_middleware(
 
 # Register the new feedback platform router
 app.include_router(feedback_router)
+app.include_router(leader_router)
+app.include_router(poker_router)
+app.include_router(poker_lab_router)
+app.include_router(mirror_router)
+app.include_router(lottery_router)
 
 
 @app.on_event("startup")
@@ -358,9 +371,64 @@ def feedback_preview(
     # #endregion
 
 
-@app.get("/", include_in_schema=False)
-def index() -> RedirectResponse:
-    return RedirectResponse(url="/feedback", status_code=307)
+@app.get("/leader", response_class=FileResponse, include_in_schema=False)
+@app.get("/leader/", response_class=FileResponse, include_in_schema=False)
+def leader_page() -> FileResponse:
+    return FileResponse(_LEADER_DIR / "index.html")
+
+
+@app.get("/leader/styles.css", include_in_schema=False)
+def leader_styles() -> FileResponse:
+    return FileResponse(_LEADER_DIR / "styles.css", media_type="text/css")
+
+
+@app.get("/leader/script.js", include_in_schema=False)
+def leader_script() -> FileResponse:
+    return FileResponse(_LEADER_DIR / "script.js", media_type="application/javascript")
+
+
+# ── Poker laboratory frontend ───────────────────────────────────────────────
+
+@app.get("/poker", response_class=FileResponse, include_in_schema=False)
+@app.get("/poker/", response_class=FileResponse, include_in_schema=False)
+def poker_page() -> FileResponse:
+    return FileResponse(_POKER_DIR / "index.html")
+
+
+@app.get("/poker/styles.css", include_in_schema=False)
+def poker_styles() -> FileResponse:
+    return FileResponse(_POKER_DIR / "styles.css", media_type="text/css")
+
+
+@app.get("/poker/script.js", include_in_schema=False)
+def poker_script() -> FileResponse:
+    return FileResponse(_POKER_DIR / "script.js", media_type="application/javascript")
+
+
+@app.get("/poker/lab", response_class=FileResponse, include_in_schema=False)
+@app.get("/poker/lab/", response_class=FileResponse, include_in_schema=False)
+def poker_lab_page() -> FileResponse:
+    return FileResponse(_POKER_DIR / "lab.html")
+
+
+@app.get("/poker/lab.js", include_in_schema=False)
+def poker_lab_script() -> FileResponse:
+    return FileResponse(_POKER_DIR / "lab.js", media_type="application/javascript")
+
+
+# ── Home: one page linking every section ────────────────────────────────────
+
+@app.get("/", response_class=FileResponse, include_in_schema=False)
+def index() -> FileResponse:
+    return FileResponse(_HOME_DIR / "index.html")
+
+
+@app.get("/home/{asset}", include_in_schema=False)
+def home_asset(asset: str) -> FileResponse:
+    media = {"home.css": "text/css", "home.js": "application/javascript"}
+    if asset not in media:
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(_HOME_DIR / asset, media_type=media[asset])
 
 
 @app.get("/api/v1/forms/feedback-template/{prediction_id}")

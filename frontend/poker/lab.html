@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shuffle &amp; Fourier Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/poker/styles.css" />
+  <style>
+    .lab { max-width: 1100px; margin: 0 auto; padding: 24px 16px 80px; display: grid;
+           grid-template-columns: minmax(0, 1fr); gap: 22px; }
+    .lab h2 { font-size: 1.25rem; color: var(--text-bright); margin: 4px 0 8px; }
+    .lab p { color: var(--text-dim); font-size: .9rem; }
+    .lab .formula { font-family: var(--mono); font-size: .82rem; color: var(--text); background: var(--surface);
+                    border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; margin: 10px 0;
+                    overflow-x: auto; white-space: nowrap; }
+    .lab svg { width: 100%; height: auto; display: block; }
+    .lab .axis { stroke: var(--border); }
+    .lab .axis-text { fill: var(--muted); font-size: 11px; font-family: Inter, sans-serif; }
+    .lab .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+    .lab .row .input { width: auto; flex: 1 1 200px; min-width: 0; }
+    .lab .row label { font-size: .8rem; color: var(--text-dim); }
+    .lab input[type=range] { flex: 1 1 200px; accent-color: var(--accent); }
+    .frames { display: grid; gap: 8px; margin-top: 12px; }
+    .frame-label { display: flex; justify-content: space-between; font-size: .78rem; color: var(--text-dim); }
+    .frame-label b { color: var(--text-bright); font-family: var(--mono); }
+    .strip { display: flex; height: 22px; border-radius: 4px; overflow: hidden; border: 1px solid var(--border); }
+    .strip span { flex: 1; }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 14px; }
+    .metric { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
+    .metric span { display: block; font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    .metric b { font-family: var(--mono); color: var(--text-bright); }
+    .metric small { display: block; color: var(--muted); font-size: .72rem; }
+    .two-up { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+    .caption { font-size: .8rem !important; text-align: center; margin-top: 6px; }
+    .punchline { border-left: 3px solid var(--amber); padding-left: 12px; margin-top: 14px; }
+    @media (max-width: 760px) { .two-up { grid-template-columns: minmax(0, 1fr); } }
+  </style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="inner">
+    <div class="logo">∿</div>
+    <div class="titles">
+      <h1>Shuffle &amp; Fourier Lab</h1>
+      <p>How random is a shuffled deck? Exact answers, not vibes.</p>
+    </div>
+    <nav class="site-nav">
+      <a href="/">Home</a>
+      <a href="/poker">Play poker</a>
+    </nav>
+  </div>
+</header>
+
+<main class="lab">
+
+  <section class="card">
+    <p class="section-title">1 · Seven shuffles</p>
+    <h2>Distance from a perfectly shuffled deck after m riffles</h2>
+    <p>
+      Exact total variation distance (Bayer &amp; Diaconis, 1992): 0 means indistinguishable from random,
+      1 means an observer can tell for certain. It is also the biggest edge any betting strategy could
+      squeeze out of the leftover order. Computed in exact integer arithmetic, not simulated.
+    </p>
+    <div class="formula" id="riffle-formula"></div>
+    <svg id="riffle-chart" viewBox="0 0 640 260" role="img" aria-label="Distance from random by number of riffles"></svg>
+    <p class="caption" id="riffle-caption"></p>
+  </section>
+
+  <section class="card">
+    <p class="section-title">2 · Watch a shuffle</p>
+    <h2>Colour each card by where it started</h2>
+    <p>
+      A new deck is a smooth rainbow. A riffle interleaves two packets, so the rainbow survives as two
+      interleaved runs. Count the <em>rising sequences</em>: a new deck has 1, a well-shuffled deck
+      averages 26.5.
+    </p>
+    <div class="row">
+      <select id="procedure-select" class="input compact" aria-label="Shuffle procedure"></select>
+      <button class="btn btn-primary btn-tiny" id="shuffle-btn">Shuffle again</button>
+    </div>
+    <p id="procedure-description"></p>
+    <div class="frames" id="frames"></div>
+    <p class="section-title" style="margin-top:18px">Measured over many shuffles</p>
+    <div class="metrics" id="procedure-metrics"></div>
+    <p class="caption" id="report-settings"></p>
+  </section>
+
+  <section class="card">
+    <p class="section-title">3 · A cut is a rotation</p>
+    <h2>Cutting as a walk around the 52nd roots of unity</h2>
+    <p>
+      A cut moves the top <i>j</i> cards to the bottom: a rotation by <i>j</i>. Rotations add up
+      mod 52, so repeated cutting is a random walk on ℤ₅₂. Its characters are the roots of unity
+      ω<sup>jm</sup>, with ω = e<sup>2πi/52</sup> (De Moivre).
+    </p>
+    <div class="formula">P̂(m) = Σⱼ P(j)·ω^(jm)   →   after k cuts: P̂(m)^k   ·   4‖Pᵏ − U‖² ≤ Σ_(m≠0) |P̂(m)|^(2k),  |z|² = z·z̄</div>
+
+    <div class="row">
+      <label for="sd-slider">How sloppy is the cut? sd =</label>
+      <input type="range" id="sd-slider" min="0.5" max="20" step="0.1" value="5.2" />
+      <b id="sd-value" class="mono">5.2 cards</b>
+    </div>
+
+    <div class="two-up">
+      <div>
+        <svg id="winding" viewBox="-130 -130 260 260" role="img" aria-label="Cut distribution wound around the circle"></svg>
+        <div class="row">
+          <label for="m-slider">character m =</label>
+          <input type="range" id="m-slider" min="0" max="51" step="1" value="1" />
+          <b id="m-value">1</b>
+        </div>
+        <p class="caption">
+          Each cut point <i>j</i> sits at angle 2π·j·m/52, sized by its probability.
+          The arrow is their centre of mass: that's P̂(m). Its length is |P̂(m)|.
+        </p>
+      </div>
+      <div>
+        <svg id="spiral" viewBox="-130 -130 260 260" role="img" aria-label="Fourier coefficients raised to the k-th power"></svg>
+        <div class="row">
+          <label for="k-slider">number of cuts k =</label>
+          <input type="range" id="k-slider" min="0" max="60" step="1" value="1" />
+          <b id="k-value">1</b>
+        </div>
+        <p class="caption">All 51 coefficients P̂(m)ᵏ. k cuts multiply them, so they spiral into 0 as the walk mixes.</p>
+      </div>
+    </div>
+
+    <div class="metrics" id="cut-metrics"></div>
+    <p class="punchline" id="punchline"></p>
+  </section>
+
+</main>
+
+<script src="/poker/lab.js"></script>
+</body>
+</html>

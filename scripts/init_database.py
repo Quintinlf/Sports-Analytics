@@ -90,6 +90,31 @@ def initialize_database() -> list[str]:
 
     Base.metadata.create_all(bind=engine)
     ensure_unified_schema(engine)
+    # Hand SQL under migrations/ is Postgres-oriented (IF NOT EXISTS, DATE types).
+    # SQLite gets the same columns via ensure_unified_schema ALTER ADD.
+    if engine.dialect.name == "postgresql":
+        migrations_dir = ROOT / "migrations"
+        if migrations_dir.is_dir():
+            from sqlalchemy import text as sa_text
+
+            with engine.begin() as conn:
+                for sql_path in sorted(migrations_dir.glob("*.sql")):
+                    sql = sql_path.read_text(encoding="utf-8")
+                    for stmt in sql.split(";"):
+                        chunk = stmt.strip()
+                        if not chunk or all(
+                            line.strip().startswith("--") or not line.strip()
+                            for line in chunk.splitlines()
+                        ):
+                            continue
+                        # A savepoint per statement: in Postgres one failure aborts the
+                        # whole transaction, so without it a single already-applied or
+                        # conflicting statement would sink every migration after it.
+                        try:
+                            with conn.begin_nested():
+                                conn.execute(sa_text(chunk))
+                        except Exception as exc:
+                            print(f"WARNING: migration {sql_path.name}: {exc}")
     ensure_default_reviewers(engine)
     ensure_reviewer_email_unique_index(engine)
 

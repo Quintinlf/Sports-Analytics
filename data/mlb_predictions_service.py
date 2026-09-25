@@ -118,9 +118,10 @@ class MLBLivePredictionService:
             try:
                 home_team = game.get("home_name", "Unknown")
                 away_team = game.get("away_name", "Unknown")
-                game_date = str(
-                    game.get("game_datetime", datetime.today().strftime("%Y-%m-%d")).split("T")[0]
+                game_datetime = game.get("game_datetime") or datetime.today().strftime(
+                    "%Y-%m-%d"
                 )
+                game_date = str(game_datetime).split("T")[0]
 
                 mlb_ctx = build_mlb_context(game)
 
@@ -174,6 +175,8 @@ class MLBLivePredictionService:
                     "league": game.get("league", "MLB"),
                     "provider_game_id": str(game.get("game_id") or ""),
                     "game_date": game_date,
+                    "game_datetime": game_datetime,
+                    "start_time_utc": game_datetime,
                     "home_team": home_team,
                     "away_team": away_team,
                     "predicted_winner": predicted_winner,
@@ -184,9 +187,11 @@ class MLBLivePredictionService:
                     "bet_recommendation": f"Lean {predicted_winner}",
                     "feature_snapshot": json.dumps(feature_snapshot),
                     "model_name": "MLB-LightGBM-v1",
+                    "model_version": getattr(model, "version", None),
                     "data_source": "mlb_statsapi",
                     "is_fallback": False,
                     "prediction_status": "UPCOMING",
+                    "game_status": "SCHEDULED",
                     "actual_home_score": None,
                     "actual_away_score": None,
                     "actual_winner": None,
