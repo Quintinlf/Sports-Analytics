@@ -62,6 +62,45 @@
     </div>
   </section>
 
+  <!-- Everyone vs the AI -->
+  <section class="card" id="leaderboard-card">
+    <p class="section-title">Everyone vs the AI</p>
+    <p class="muted left">Every pick is checked against the real result once the game is final. Each person is
+      compared with the model on the games they picked.</p>
+    <div class="table-wrap">
+      <table class="board">
+        <thead><tr><th>Who</th><th>Picks</th><th>Right</th><th>AI right</th><th>Overrides W-L</th><th>Lead</th></tr></thead>
+        <tbody id="leaderboard"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Powerball -->
+  <section class="card" id="powerball">
+    <p class="section-title">Powerball: you vs the model</p>
+    <h2 class="pb-title" id="pb-next">Loading…</h2>
+    <p class="muted left" id="pb-note"></p>
+    <div class="pb-tickets">
+      <div><span class="stat-label">Model's ticket</span><div class="balls" id="pb-model"></div></div>
+      <div><span class="stat-label" id="pb-you-label">Your ticket</span><div class="balls" id="pb-you"></div></div>
+    </div>
+    <form class="pb-form" id="pb-form">
+      <label class="stat-label" for="pb-w1">Pick your own for this draw</label>
+      <div class="pb-inputs">
+        <input id="pb-w1" type="number" min="1" max="69" required aria-label="White ball 1">
+        <input id="pb-w2" type="number" min="1" max="69" required aria-label="White ball 2">
+        <input id="pb-w3" type="number" min="1" max="69" required aria-label="White ball 3">
+        <input id="pb-w4" type="number" min="1" max="69" required aria-label="White ball 4">
+        <input id="pb-w5" type="number" min="1" max="69" required aria-label="White ball 5">
+        <input id="pb-pb" class="red" type="number" min="1" max="26" required aria-label="Powerball">
+        <button class="btn btn-primary" type="submit">Save</button>
+      </div>
+      <p class="muted left" id="pb-msg"></p>
+    </form>
+    <div class="stat-grid" id="pb-ledger"></div>
+    <ul class="game-list" id="pb-history"></ul>
+  </section>
+
   <!-- Sections -->
   <section class="grid">
     <article class="card section poker">

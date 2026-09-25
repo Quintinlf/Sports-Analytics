@@ -27,6 +27,7 @@ from backend.routes.leader import router as leader_router
 from backend.routes.poker import router as poker_router
 from backend.routes.poker_lab import router as poker_lab_router
 from backend.routes.mirror import router as mirror_router
+from backend.routes.lottery import router as lottery_router
 from scripts.db_utils import log_startup_database_diagnostics
 from backend.schemas import (
     FeedbackStatusResponse,
@@ -285,6 +286,7 @@ app.include_router(leader_router)
 app.include_router(poker_router)
 app.include_router(poker_lab_router)
 app.include_router(mirror_router)
+app.include_router(lottery_router)
 
 
 @app.on_event("startup")

@@ -17,6 +17,8 @@ __all__ = [
     "AnalystFeedback",
     "AnalystQuestion",
     "FeatureSuggestion",
+    "LotteryPick",
+    "PickGrade",
     "PredictionReview",
     "ReviewOutcome",
     "Reviewer",
@@ -213,3 +215,56 @@ class FeatureSuggestion(Base):
     estimated_impact: Mapped[str] = mapped_column(String(20), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class PickGrade(Base):
+    """One pick on one settled game, graded against what actually happened.
+
+    Written by ``backend.grading`` for every reviewer's submitted review and for
+    the owner's default picks (which equal the model's). Kept apart from
+    ``prediction_reviews`` so default picks never count as analyst activity.
+    ``source`` is auto | agreed | overrode | late; late picks are stored but not
+    scored, because a pick made after the start is not a prediction.
+    """
+
+    __tablename__ = "pick_grades"
+
+    reviewer_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    prediction_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    sport: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    game_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    pick: Mapped[str] = mapped_column(String(100), nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    model_pick: Mapped[str] = mapped_column(String(100), nullable=False)
+    actual_winner: Mapped[str] = mapped_column(String(100), nullable=False)
+    correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    model_correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    graded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class LotteryPick(Base):
+    """A lottery ticket committed before its draw, graded once the draw is out.
+
+    ``owner`` is ``"model"`` or a reviewer id. The model's ticket is a seeded
+    function of the draw date, so it is fixed in advance whenever it is stored.
+    """
+
+    __tablename__ = "lottery_picks"
+    __table_args__ = (UniqueConstraint("game_key", "draw_date", "owner", name="uq_lottery_pick"),)
+
+    pick_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    game_key: Mapped[str] = mapped_column(String(30), nullable=False)
+    draw_date: Mapped[str] = mapped_column(String(10), nullable=False)
+    owner: Mapped[str] = mapped_column(String(100), nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    whites: Mapped[str] = mapped_column(String(40), nullable=False)
+    special: Mapped[int] = mapped_column(Integer, nullable=False)
+    crowd_score: Mapped[float | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    drawn_whites: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    drawn_special: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    matched_white: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    matched_special: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    prize: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    jackpot: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    graded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

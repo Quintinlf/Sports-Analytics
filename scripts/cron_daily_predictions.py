@@ -79,6 +79,28 @@ def _verify_usa_belgium(engine) -> None:
     )
 
 
+def grade_everything(engine) -> None:
+    """After settlement: grade every pick, commit tonight's Powerball ticket, grade draws.
+
+    Each step is non-fatal, like settlement: a failure here must not mark the
+    prediction ingest itself as failed.
+    """
+    try:
+        from backend.grading import grade_sports
+        from scripts.db_utils import _column_names
+
+        logger.info("Pick grading: %s", grade_sports(engine, _column_names(engine, "predictions")))
+    except Exception as exc:
+        logger.warning("Pick grading failed (non-fatal): %s", exc)
+    try:
+        from backend.routes.lottery import refresh
+
+        with engine.begin() as conn:
+            logger.info("Powerball: %s", refresh(conn))
+    except Exception as exc:
+        logger.warning("Powerball step failed (non-fatal): %s", exc)
+
+
 def main() -> None:
     """Execute the daily prediction ingestion pipeline."""
     args = parse_arguments()
@@ -122,6 +144,7 @@ def main() -> None:
             logger.info("Post-ingest settlement: %s", stats)
         except Exception as exc:
             logger.warning("Settlement step failed (non-fatal): %s", exc)
+        grade_everything(engine)
 
     logger.info("=" * 80)
     if success:

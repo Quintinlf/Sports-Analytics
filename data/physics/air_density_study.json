@@ -1,0 +1,50 @@
+{
+ "seasons": [
+  2022,
+  2023,
+  2024,
+  2025
+ ],
+ "games": 9919,
+ "density_range": [
+  0.9412662765425699,
+  1.3814971082735332
+ ],
+ "runs_vs_density": {
+  "all_games_r": -0.13139552660646364,
+  "within_park_r": -0.06921327428587887,
+  "within_park_p": 0.0004997501249375312,
+  "outdoor_within_park_r": -0.08031139882455796
+ },
+ "runs_vs_wind_out": {
+  "outdoor_r": 0.030021433582783887,
+  "outdoor_within_park_r": 0.040863039779858674
+ },
+ "home_win_vs_density": {
+  "within_park_r": 0.006839088068534234,
+  "within_park_p": 0.4947526236881559
+ },
+ "forecast_total_runs": {
+  "train_seasons": [
+   2022,
+   2023,
+   2024
+  ],
+  "test_season": 2025,
+  "park_average_only": {
+   "mae": 3.630914041565784,
+   "rmse": 4.588916028733425,
+   "n_test": 2482,
+   "coef": {}
+  },
+  "plus_air_and_wind": {
+   "mae": 3.62644291558262,
+   "rmse": 4.576314544853738,
+   "n_test": 2482,
+   "coef": {
+    "rho": -14.303975747409586,
+    "wind_out": 0.02711758666619346
+   }
+  }
+ }
+}

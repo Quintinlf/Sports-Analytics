@@ -20,3 +20,5 @@ Thumbs.db
 *.log
 
 .claude/
+# Cached MLB schedule pulls for scripts/air_density_study.py (regenerable)
+data/physics/mlb_games_*.json

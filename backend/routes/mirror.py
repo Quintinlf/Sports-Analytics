@@ -12,6 +12,7 @@ from fastapi import APIRouter, Query
 from sqlalchemy import text
 
 from backend.db import engine, get_db_session
+from backend.grading import grade_sports, leaderboard, resolve_owner_id
 from backend.model_mirror import load_games, owner_ref, scoreboard
 from scripts.db_utils import _column_names
 
@@ -61,3 +62,24 @@ def get_scoreboard(
         "same_name_accounts": owner["same_name_accounts"] if owner else 0,
     }
     return board
+
+
+@router.get("/features")
+def get_feature_report() -> Dict[str, Any]:
+    """Each stored pregame feature checked against real results, per sport."""
+    from backend.feature_report import assess, load_rows
+
+    with engine.connect() as conn:
+        rows = load_rows(conn)
+    return {"sports": assess(rows)}
+
+
+@router.get("/leaderboard")
+def get_leaderboard() -> Dict[str, Any]:
+    """Grade every settled pick (idempotent), then rank everyone against the model."""
+    counts = grade_sports(engine, _column_names(engine, "predictions"))
+    with engine.connect() as conn:
+        owner_id = resolve_owner_id(conn)
+        rows = leaderboard(conn, owner_id)
+    return {"leaderboard": rows, "grading": counts,
+            "note": "Each person is compared with the model on the games that person picked."}
