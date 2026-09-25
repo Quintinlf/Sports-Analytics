@@ -1158,21 +1158,23 @@ def get_leagues(sport: str) -> Dict[str, Any]:
     return {"sport": sport_ui, "leagues": LEAGUES.get(sport_ui, [])}
 
 
-_FIFA_PREDICTIONS_BASE_SQL = """
-    SELECT prediction_id, sport, league, game_date, home_team, away_team,
-           predicted_winner, confidence_level, actual_home_score, actual_away_score,
-           actual_winner, correct, prediction_status, feature_snapshot,
-           model_name, created_at, data_source, is_fallback
-    FROM predictions
-    WHERE sport IN ('SOCCER', 'FIFA')
-"""
-
 _PREDICTION_SELECT_COLS = """
     prediction_id, sport, league, game_date, home_team, away_team,
     predicted_winner, confidence_level, actual_home_score, actual_away_score,
     actual_winner, correct, prediction_status, feature_snapshot,
     model_name, created_at, data_source, is_fallback
 """
+
+# Optional lifecycle columns appended when present (migrations/006).
+_LIFECYCLE_SELECT_COLS = (
+    "start_time_utc",
+    "game_date_pacific",
+    "game_status",
+    "pipeline_run_id",
+    "model_version",
+    "win_probability",
+    "provider_game_id",
+)
 
 
 def _dashboard_pred_limits() -> Dict[str, int]:
@@ -1196,7 +1198,7 @@ def _prediction_priority_order_sql() -> str:
     """
     upcoming_rank = """
         CASE
-            WHEN COALESCE(prediction_status, '') = 'UPCOMING' THEN 1
+            WHEN UPPER(COALESCE(prediction_status, '')) IN ('UPCOMING', 'ACTIVE') THEN 1
             WHEN actual_winner IS NULL THEN 1
             ELSE 0
         END
@@ -1212,9 +1214,35 @@ def _prediction_priority_order_sql() -> str:
     # Weighted score until a dedicated priority_score column exists
     return f"""
         ({conf_rank}) * 10 + ({data_rank}) * 5 + ({upcoming_rank}) * 3 DESC,
-        game_date DESC,
+        game_date ASC,
         prediction_id DESC
     """
+
+
+def _select_prediction_cols(session_engine=None) -> str:
+    """Base columns plus lifecycle columns when the schema has them."""
+    eng = session_engine or engine
+    cols = _column_names(eng, "predictions")
+    extra = [c for c in _LIFECYCLE_SELECT_COLS if c in cols]
+    if not extra:
+        return _PREDICTION_SELECT_COLS
+    return _PREDICTION_SELECT_COLS.rstrip() + ",\n    " + ", ".join(extra)
+
+
+def _upcoming_predictions_where_sql(eng) -> tuple[str, dict]:
+    """Filter to non-settled games in the Pacific display window."""
+    from data.prediction_time import display_window
+
+    start, end = display_window(days_ahead=int(os.getenv("DASHBOARD_DAYS_AHEAD", "7")))
+    cols = _column_names(eng, "predictions")
+    date_expr = "game_date_pacific" if "game_date_pacific" in cols else "game_date"
+    where = f"""
+        UPPER(COALESCE(prediction_status, 'UPCOMING')) NOT IN ('SETTLED', 'VOID', 'FINAL')
+        AND actual_home_score IS NULL
+        AND CAST({date_expr} AS TEXT) >= :win_start
+        AND CAST({date_expr} AS TEXT) <= :win_end
+    """
+    return where, {"win_start": start, "win_end": end}
 
 
 def _fetch_predictions_for_sport(
@@ -1223,19 +1251,33 @@ def _fetch_predictions_for_sport(
     limit: int,
 ) -> List[Dict[str, Any]]:
     order = _prediction_priority_order_sql()
+    select_cols = _select_prediction_cols()
+    where_extra, window_params = _upcoming_predictions_where_sql(engine)
     if db_sport == "SOCCER":
-        sql = f"{_FIFA_PREDICTIONS_BASE_SQL} ORDER BY {order} LIMIT :limit"
-        rows = session.execute(text(sql), {"limit": limit}).mappings().all()
-    else:
         sql = f"""
-            SELECT {_PREDICTION_SELECT_COLS}
+            SELECT {select_cols}
             FROM predictions
-            WHERE sport = :s
-              AND predicted_winner IS NOT NULL
+            WHERE sport IN ('SOCCER', 'FIFA')
+              AND {where_extra}
             ORDER BY {order}
             LIMIT :limit
         """
-        rows = session.execute(text(sql), {"s": db_sport, "limit": limit}).mappings().all()
+        rows = session.execute(
+            text(sql), {**window_params, "limit": limit}
+        ).mappings().all()
+    else:
+        sql = f"""
+            SELECT {select_cols}
+            FROM predictions
+            WHERE sport = :s
+              AND predicted_winner IS NOT NULL
+              AND {where_extra}
+            ORDER BY {order}
+            LIMIT :limit
+        """
+        rows = session.execute(
+            text(sql), {**window_params, "s": db_sport, "limit": limit}
+        ).mappings().all()
     return [dict(r) for r in rows]
 
 
@@ -1243,9 +1285,17 @@ def _serialize_prediction_row(row: Dict[str, Any]) -> Dict[str, Any]:
     d = dict(row)
     snap = _parse_snapshot(d.pop("feature_snapshot", None))
     d["sport_ui"] = _ui_sport(d["sport"])
-    d["settled"] = d.get("actual_home_score") is not None
+    status = str(d.get("prediction_status") or "").upper()
+    d["settled"] = (
+        d.get("actual_home_score") is not None
+        or status in {"SETTLED", "FINAL"}
+    )
     if d.get("game_date") is not None:
         d["game_date"] = str(d["game_date"])
+    if d.get("game_date_pacific") is not None:
+        d["game_date_pacific"] = str(d["game_date_pacific"])
+    if d.get("start_time_utc") is not None:
+        d["start_time_utc"] = str(d["start_time_utc"])
     if d.get("created_at") is not None:
         d["created_at"] = str(d["created_at"])
     # Prefer first-class columns; fall back to snapshot for older rows.
@@ -1255,6 +1305,20 @@ def _serialize_prediction_row(row: Dict[str, Any]) -> Dict[str, Any]:
         d["is_fallback"] = bool(snap.get("is_fallback"))
     else:
         d["is_fallback"] = bool(d.get("is_fallback"))
+    # Provenance-friendly fields when present on the row / schema.
+    if "win_probability" in d and d.get("win_probability") is not None:
+        try:
+            d["win_probability"] = float(d["win_probability"])
+        except (TypeError, ValueError):
+            pass
+    if d.get("provider_game_id") is not None:
+        d["provider_game_id"] = str(d["provider_game_id"])
+    if d.get("model_version") is not None:
+        d["model_version"] = str(d["model_version"])
+    if d.get("pipeline_run_id") is not None:
+        d["pipeline_run_id"] = str(d["pipeline_run_id"])
+    if d.get("game_status") is not None:
+        d["game_status"] = str(d["game_status"])
     return d
 
 

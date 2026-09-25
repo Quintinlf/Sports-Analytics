@@ -279,6 +279,13 @@ function applyReviewerSession(data, history, customSections) {
     onboarding_completed_at: data.onboarding_completed_at,
   };
 
+  // Leaders use the observability dashboard as their primary surface.
+  if (String(data.analyst_role || "").toLowerCase() === "leader") {
+    const rid = encodeURIComponent(data.reviewer_id);
+    window.location.replace(`/leader?reviewer_id=${rid}`);
+    return;
+  }
+
   document.getElementById("reviewer-login").style.display = "none";
   document.getElementById("reviewer-panel").style.display = "block";
   document.getElementById("reviewer-history-wrap").style.display = "block";

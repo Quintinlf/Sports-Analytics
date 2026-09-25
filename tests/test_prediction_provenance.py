@@ -84,12 +84,15 @@ class TestPredictionProvenance(unittest.TestCase):
         self.assertFalse(bool(row["is_fallback"]))
 
     def test_list_predictions_includes_provenance(self) -> None:
+        from data.prediction_time import pacific_today
+
+        today = pacific_today()
         insert_prediction(
             self.engine,
             {
                 "sport": "NBA",
                 "league": "NBA",
-                "game_date": "2026-07-21",
+                "game_date": today,
                 "home_team": "LAL",
                 "away_team": "BOS",
                 "predicted_winner": "LAL",
@@ -99,7 +102,7 @@ class TestPredictionProvenance(unittest.TestCase):
                 "data_source": "nba_api",
                 "is_fallback": False,
                 "prediction_status": "UPCOMING",
-                "created_at": "2026-07-21T12:00:00",
+                "created_at": f"{today}T12:00:00",
             },
         )
         res = self.client.get("/api/feedback/predictions?sport=NBA")

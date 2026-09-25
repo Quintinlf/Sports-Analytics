@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Leader Observability</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/leader/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="inner">
+      <div>
+        <p class="eyebrow">Sports Analytics</p>
+        <h1>Leader Observability</h1>
+        <p class="sub">System health · model performance · reviewer activity — not a leaderboard</p>
+      </div>
+      <div class="header-actions">
+        <a class="link-quiet" href="/feedback">Analyst view</a>
+        <button class="btn" id="refresh-btn" type="button">Refresh</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="page-wrap">
+    <div id="gate" class="card">
+      <p class="section-title">Leader access</p>
+      <p class="muted">Sign in with your leader reviewer name, or open with <code>?reviewer_id=quintin</code>.</p>
+      <div class="login-row">
+        <input id="leader-name" type="text" placeholder="Name (e.g. Quintin)" autocomplete="off" />
+        <button class="btn btn-primary" id="leader-login-btn" type="button">Open dashboard</button>
+      </div>
+      <p id="gate-error" class="error" style="display:none"></p>
+    </div>
+
+    <div id="dashboard" style="display:none">
+      <section class="card" id="health-section">
+        <div class="section-head">
+          <p class="section-title">System health</p>
+          <span id="health-stamp" class="muted mono"></span>
+        </div>
+        <div class="health-grid" id="health-grid"></div>
+        <div class="pipeline-row" id="pipeline-row"></div>
+      </section>
+
+      <section class="card">
+        <p class="section-title">Model performance</p>
+        <div id="perf-overall" class="stat-strip"></div>
+        <div class="two-col">
+          <div>
+            <h3>By sport</h3>
+            <div id="perf-sport" class="table-wrap"></div>
+          </div>
+          <div>
+            <h3>By confidence</h3>
+            <div id="perf-conf" class="table-wrap"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <p class="section-title">Reviewer activity</p>
+        <p class="muted small">Side-by-side stats — no rankings.</p>
+        <div id="reviewers-table" class="table-wrap"></div>
+      </section>
+
+      <section class="card">
+        <p class="section-title">Recent failures</p>
+        <div id="failures" class="failures"></div>
+      </section>
+
+      <section class="card">
+        <p class="section-title">Prediction provenance</p>
+        <div class="login-row">
+          <input id="prov-id" type="text" placeholder="prediction_id" />
+          <button class="btn" id="prov-btn" type="button">Lookup</button>
+        </div>
+        <pre id="prov-out" class="mono prov-out"></pre>
+      </section>
+    </div>
+  </main>
+
+  <script src="/leader/script.js"></script>
+</body>
+</html>

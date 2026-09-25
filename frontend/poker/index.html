@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Poker Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/poker/styles.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="inner">
+    <div class="logo">♠</div>
+    <div class="titles">
+      <h1>Poker Laboratory</h1>
+      <p>Play the hand · watch the mathematics · build the intuition</p>
+    </div>
+    <div class="header-stats">
+      <div class="hstat"><span class="hstat-label">Hands</span><span class="hstat-value" id="stat-hands">0</span></div>
+      <div class="hstat"><span class="hstat-label">Net</span><span class="hstat-value" id="stat-net">0</span></div>
+    </div>
+  </div>
+</header>
+
+<!-- ── Sit-down screen ──────────────────────────────────────── -->
+<div class="page-wrap" id="setup-screen">
+  <div class="card setup-card">
+    <p class="section-title">Sit down</p>
+    <h2>Heads-up No-Limit Hold'em</h2>
+    <p class="muted-copy">
+      You against one AI opponent. Blinds alternate, stacks carry between hands,
+      and every number you see is computed from the actual game state.
+    </p>
+
+    <label class="field-label" for="opponent-select">Opponent</label>
+    <select id="opponent-select" class="input"></select>
+    <p class="hint" id="opponent-hint"></p>
+
+    <div class="field-grid">
+      <div>
+        <label class="field-label" for="sb-input">Small blind</label>
+        <input type="number" id="sb-input" class="input" value="1" min="1" />
+      </div>
+      <div>
+        <label class="field-label" for="bb-input">Big blind</label>
+        <input type="number" id="bb-input" class="input" value="2" min="1" />
+      </div>
+      <div>
+        <label class="field-label" for="stack-input">Starting stack</label>
+        <input type="number" id="stack-input" class="input" value="200" min="2" />
+      </div>
+    </div>
+
+    <label class="field-label" for="mode-select">Learning mode</label>
+    <select id="mode-select" class="input"></select>
+    <p class="hint" id="mode-hint"></p>
+
+    <button class="btn btn-primary btn-block" id="sit-btn">Deal me in →</button>
+    <p class="error-text" id="setup-error"></p>
+  </div>
+</div>
+
+<!-- ── Table screen ─────────────────────────────────────────── -->
+<div class="table-screen" id="table-screen" hidden>
+  <div class="layout">
+
+    <!-- The table itself -->
+    <section class="table-column">
+      <div class="poker-table" id="poker-table">
+
+        <div class="seat seat-villain" id="villain-seat">
+          <div class="seat-cards" id="villain-cards"></div>
+          <div class="seat-plate">
+            <span class="seat-name" id="villain-name">Opponent</span>
+            <span class="seat-stack" id="villain-stack">0</span>
+          </div>
+          <div class="seat-meta">
+            <span class="pos-badge" id="villain-pos"></span>
+            <span class="dealer-btn" id="villain-dealer" hidden>D</span>
+          </div>
+          <div class="bet-chip" id="villain-bet" hidden></div>
+        </div>
+
+        <div class="table-center">
+          <div class="pot-display">
+            <span class="pot-label">Pot</span>
+            <span class="pot-value" id="pot-value">0</span>
+          </div>
+          <div class="board" id="board"></div>
+          <div class="street-label" id="street-label">Preflop</div>
+        </div>
+
+        <div class="seat seat-hero" id="hero-seat">
+          <div class="bet-chip" id="hero-bet" hidden></div>
+          <div class="seat-meta">
+            <span class="pos-badge" id="hero-pos"></span>
+            <span class="dealer-btn" id="hero-dealer" hidden>D</span>
+          </div>
+          <div class="seat-plate">
+            <span class="seat-name" id="hero-name">You</span>
+            <span class="seat-stack" id="hero-stack">0</span>
+          </div>
+          <div class="seat-cards" id="hero-cards"></div>
+          <div class="made-hand" id="made-hand"></div>
+        </div>
+
+        <div class="hand-banner" id="hand-banner" hidden></div>
+      </div>
+
+      <!-- Action bar -->
+      <div class="action-bar" id="action-bar">
+        <div class="action-buttons" id="action-buttons"></div>
+        <div class="raise-panel" id="raise-panel" hidden>
+          <div class="raise-row">
+            <input type="range" id="raise-slider" class="slider" />
+            <input type="number" id="raise-amount" class="input raise-input" />
+          </div>
+          <div class="sizing-presets" id="sizing-presets"></div>
+          <div class="raise-confirm">
+            <button class="btn btn-ghost" id="raise-cancel">Cancel</button>
+            <button class="btn btn-primary" id="raise-confirm-btn">Raise</button>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-block" id="next-hand-btn" hidden>Next hand →</button>
+        <p class="error-text" id="action-error"></p>
+      </div>
+    </section>
+
+    <!-- Analytics side panel -->
+    <aside class="side-column">
+      <div class="panel">
+        <div class="panel-head">
+          <p class="section-title">Learning mode</p>
+        </div>
+        <select id="mode-live-select" class="input compact"></select>
+        <p class="hint" id="mode-live-hint"></p>
+      </div>
+
+      <div class="panel" id="math-panel">
+        <div class="panel-head">
+          <p class="section-title">Your decision</p>
+          <button class="btn btn-ghost btn-tiny" id="reveal-btn" hidden>Reveal maths</button>
+        </div>
+        <div id="math-body"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><p class="section-title">Hand log</p></div>
+        <div class="hand-log" id="hand-log"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><p class="section-title">Session</p></div>
+        <div class="session-grid" id="session-grid"></div>
+        <button class="btn btn-ghost btn-block" id="leave-btn">Leave table</button>
+      </div>
+    </aside>
+
+  </div>
+</div>
+
+<script src="/poker/script.js"></script>
+</body>
+</html>

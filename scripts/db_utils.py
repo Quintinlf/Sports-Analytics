@@ -77,7 +77,12 @@ CREATE TABLE IF NOT EXISTS predictions (
     correct INTEGER,
     created_at TEXT NOT NULL,
     data_source TEXT,
-    is_fallback INTEGER
+    is_fallback INTEGER,
+    start_time_utc TEXT,
+    game_date_pacific TEXT,
+    game_status TEXT,
+    pipeline_run_id TEXT,
+    model_version TEXT
 );
 """
 
@@ -119,7 +124,12 @@ CREATE TABLE IF NOT EXISTS predictions (
     correct INTEGER,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     data_source TEXT,
-    is_fallback BOOLEAN
+    is_fallback BOOLEAN,
+    start_time_utc TIMESTAMP,
+    game_date_pacific DATE,
+    game_status TEXT,
+    pipeline_run_id TEXT,
+    model_version TEXT
 );
 """
 
@@ -153,6 +163,11 @@ UNIFIED_PREDICTION_COLUMNS = [
     ("created_at", "TEXT"),
     ("data_source", "TEXT"),
     ("is_fallback", "INTEGER"),
+    ("start_time_utc", "TEXT"),
+    ("game_date_pacific", "TEXT"),
+    ("game_status", "TEXT"),
+    ("pipeline_run_id", "TEXT"),
+    ("model_version", "TEXT"),
 ]
 
 
@@ -492,11 +507,25 @@ def _provenance_from_prediction(prediction_data: Dict[str, Any], feature_snapsho
 
 
 def _compute_game_signature(prediction_data: Dict[str, Any]) -> str:
+    """Secondary dedupe key. Prefer provider identity; never treat display date as truth.
+
+    Upsert still matches ``provider_game_id`` first. Signature is a fallback
+    when the provider id is missing.
+    """
     sport = str(prediction_data.get("sport", "")).upper().strip()
-    game_date = str(prediction_data.get("game_date", "")).strip()
+    provider = str(prediction_data.get("provider_game_id") or "").strip()
+    if provider:
+        raw = f"{sport}|provider|{provider}"
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    start = str(
+        prediction_data.get("start_time_utc")
+        or prediction_data.get("game_date_pacific")
+        or prediction_data.get("game_date")
+        or ""
+    ).strip()
     home = str(prediction_data.get("home_team", "")).upper().strip()
     away = str(prediction_data.get("away_team", "")).upper().strip()
-    raw = f"{sport}|{game_date}|{home}|{away}"
+    raw = f"{sport}|{start}|{home}|{away}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -579,9 +608,19 @@ def ensure_unified_schema(engine: Engine) -> None:
                 ).mappings().all()
                 for row in rows:
                     sig = _compute_game_signature(dict(row))
+                    clash = conn.execute(
+                        text(
+                            "SELECT 1 FROM predictions "
+                            "WHERE game_signature = :sig AND prediction_id != :pid LIMIT 1"
+                        ),
+                        {"sig": sig, "pid": row["prediction_id"]},
+                    ).first()
+                    if clash:
+                        continue
                     conn.execute(
                         text(
-                            "UPDATE predictions SET game_signature = :sig WHERE prediction_id = :pid"
+                            "UPDATE predictions SET game_signature = :sig "
+                            "WHERE prediction_id = :pid"
                         ),
                         {"sig": sig, "pid": row["prediction_id"]},
                     )
@@ -615,6 +654,12 @@ def ensure_unified_schema(engine: Engine) -> None:
             "ON predictions (provider_game_id)",
             "CREATE INDEX IF NOT EXISTS idx_options_prediction "
             "ON prediction_options (prediction_id)",
+            "CREATE INDEX IF NOT EXISTS idx_predictions_start_time_utc "
+            "ON predictions (start_time_utc)",
+            "CREATE INDEX IF NOT EXISTS idx_predictions_game_date_pacific "
+            "ON predictions (game_date_pacific)",
+            "CREATE INDEX IF NOT EXISTS idx_predictions_prediction_status "
+            "ON predictions (prediction_status)",
         ):
             conn.execute(text(idx_sql))
         # #region agent log
@@ -653,6 +698,10 @@ def ensure_unified_schema(engine: Engine) -> None:
 DEFAULT_REVIEWER_ID = "quintin"
 DEFAULT_REVIEWER_NAME = "Quintin"
 DEFAULT_REVIEWER_EMAIL = "quintinlf7@gmail.com"
+
+# Normal analyst seed (insert-only; no email invented).
+TIMOTHY_REVIEWER_ID = "timothy"
+TIMOTHY_REVIEWER_NAME = "Timothy"
 
 REVIEWER_PROFILE_COLUMNS = [
     ("first_name", "TEXT"),
@@ -876,6 +925,30 @@ def ensure_default_reviewers(engine: Engine) -> None:
         ).first()
 
         if existing:
+            reviewer_id = existing[0]
+            # Always promote Quintin / DEFAULT_REVIEWER_ID to leader.
+            conn.execute(
+                text(
+                    """
+                    UPDATE reviewers
+                    SET analyst_role = 'leader'
+                    WHERE reviewer_id = :rid
+                    """
+                ),
+                {"rid": reviewer_id},
+            )
+            # Leaders use /leader, not analyst digests, unless they later opt in.
+            if _table_exists(engine, "reviewer_preferences"):
+                conn.execute(
+                    text(
+                        """
+                        UPDATE reviewer_preferences
+                        SET emails_enabled = :emails_enabled
+                        WHERE reviewer_id = :rid
+                        """
+                    ),
+                    {"rid": reviewer_id, "emails_enabled": False},
+                )
             conn.execute(
                 text(
                     """
@@ -885,9 +958,8 @@ def ensure_default_reviewers(engine: Engine) -> None:
                       AND (email IS NULL OR email = 'quintin@example.com')
                     """
                 ),
-                {"rid": existing[0], "email": DEFAULT_REVIEWER_EMAIL},
+                {"rid": reviewer_id, "email": DEFAULT_REVIEWER_EMAIL},
             )
-            reviewer_id = existing[0]
         else:
             first, last = _split_display_name(DEFAULT_REVIEWER_NAME)
             conn.execute(
@@ -895,7 +967,7 @@ def ensure_default_reviewers(engine: Engine) -> None:
                     """
                     INSERT INTO reviewers
                         (reviewer_id, name, email, first_name, last_name, analyst_role, profile_public, created_at)
-                    VALUES (:rid, :name, :email, :first_name, :last_name, 'analyst', :profile_public, :ts)
+                    VALUES (:rid, :name, :email, :first_name, :last_name, 'leader', :profile_public, :ts)
                     """
                 ),
                 {
@@ -910,6 +982,37 @@ def ensure_default_reviewers(engine: Engine) -> None:
             )
             reviewer_id = DEFAULT_REVIEWER_ID
 
+        # Timothy: normal analyst, insert-only (no email invented).
+        timothy_exists = conn.execute(
+            text(
+                """
+                SELECT reviewer_id FROM reviewers
+                WHERE reviewer_id = :rid OR lower(name) = lower(:name)
+                LIMIT 1
+                """
+            ),
+            {"rid": TIMOTHY_REVIEWER_ID, "name": TIMOTHY_REVIEWER_NAME},
+        ).first()
+        if not timothy_exists:
+            t_first, t_last = _split_display_name(TIMOTHY_REVIEWER_NAME)
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO reviewers
+                        (reviewer_id, name, email, first_name, last_name, analyst_role, profile_public, created_at)
+                    VALUES (:rid, :name, NULL, :first_name, :last_name, 'analyst', :profile_public, :ts)
+                    """
+                ),
+                {
+                    "rid": TIMOTHY_REVIEWER_ID,
+                    "name": TIMOTHY_REVIEWER_NAME,
+                    "first_name": t_first,
+                    "last_name": t_last,
+                    "profile_public": False,
+                    "ts": ts,
+                },
+            )
+
     # Outside the seed transaction so a unique-index failure cannot roll back seeds.
     try:
         ensure_reviewer_email_unique_index(engine)
@@ -918,6 +1021,8 @@ def ensure_default_reviewers(engine: Engine) -> None:
 
     with engine.begin() as conn:
         if _table_exists(engine, "reviewer_preferences"):
+            # Leaders default to emails_enabled=False (no analyst digests unless opt-in).
+            # ON CONFLICT DO NOTHING: never force-disable if they already opted in.
             conn.execute(
                 text(
                     """
@@ -933,7 +1038,7 @@ def ensure_default_reviewers(engine: Engine) -> None:
                 {
                     "rid": reviewer_id,
                     "sports": json.dumps(["MLB", "NBA"]),
-                    "emails_enabled": True,
+                    "emails_enabled": False,
                     "wants_betting_section": True,
                     "wants_explanations": True,
                     "wants_postgame_reviews": True,
@@ -958,6 +1063,14 @@ def ensure_default_reviewers(engine: Engine) -> None:
 def insert_prediction(engine: Engine, prediction_data: Dict[str, Any]) -> int:
     """Insert a unified prediction row and return its integer prediction_id."""
     ensure_unified_schema(engine)
+
+    # Derive start_time_utc / game_date_pacific; keep game_date as Pacific display date.
+    try:
+        from data.prediction_time import enrich_prediction_times
+
+        prediction_data = enrich_prediction_times(dict(prediction_data))
+    except Exception:
+        prediction_data = dict(prediction_data)
 
     created_at = prediction_data.get("created_at") or datetime.utcnow().isoformat()
     feature_snapshot = _serialize_feature_snapshot(prediction_data.get("feature_snapshot"))
@@ -1057,6 +1170,11 @@ def insert_prediction(engine: Engine, prediction_data: Dict[str, Any]) -> int:
                 "created_at": created_at,
                 "data_source": data_source,
                 "is_fallback": is_fallback,
+                "start_time_utc": prediction_data.get("start_time_utc"),
+                "game_date_pacific": prediction_data.get("game_date_pacific"),
+                "game_status": prediction_data.get("game_status", "SCHEDULED"),
+                "pipeline_run_id": prediction_data.get("pipeline_run_id"),
+                "model_version": prediction_data.get("model_version"),
             }
             existing = None
             if provider_game_id:
@@ -1076,11 +1194,28 @@ def insert_prediction(engine: Engine, prediction_data: Dict[str, Any]) -> int:
                     {"game_signature": game_signature},
                 ).fetchone()
 
+            # Only write lifecycle columns when the live schema has them
+            # (auto-migrate / migrations/006). Older DBs keep working.
+            lifecycle_cols = [
+                c
+                for c in (
+                    "start_time_utc",
+                    "game_date_pacific",
+                    "game_status",
+                    "pipeline_run_id",
+                    "model_version",
+                )
+                if _column_exists(engine, "predictions", c)
+            ]
+
             if existing:
                 prediction_id = int(existing[0])
+                lifecycle_set = "".join(
+                    f",\n                            {c} = :{c}" for c in lifecycle_cols
+                )
                 conn.execute(
                     text(
-                        """
+                        f"""
                         UPDATE predictions
                         SET provider_game_id = :provider_game_id,
                             game_signature = :game_signature,
@@ -1103,7 +1238,7 @@ def insert_prediction(engine: Engine, prediction_data: Dict[str, Any]) -> int:
                             actual_winner = :actual_winner,
                             correct = :correct,
                             data_source = :data_source,
-                            is_fallback = :is_fallback
+                            is_fallback = :is_fallback{lifecycle_set}
                         WHERE prediction_id = :prediction_id
                         """
                     ),
@@ -1111,21 +1246,27 @@ def insert_prediction(engine: Engine, prediction_data: Dict[str, Any]) -> int:
                 )
                 return prediction_id
 
-            insert_sql = """
+            lifecycle_insert_cols = (
+                (", " + ", ".join(lifecycle_cols)) if lifecycle_cols else ""
+            )
+            lifecycle_insert_vals = (
+                (", " + ", ".join(f":{c}" for c in lifecycle_cols)) if lifecycle_cols else ""
+            )
+            insert_sql = f"""
                 INSERT INTO predictions (
                     provider_game_id, game_signature, sport, league, game_date, home_team, away_team,
                     predicted_winner, win_probability, confidence_level,
                     bet_type, bet_units, bet_recommendation,
                     feature_snapshot, model_name, prediction_status,
                     actual_home_score, actual_away_score, actual_winner, correct,
-                    created_at, data_source, is_fallback
+                    created_at, data_source, is_fallback{lifecycle_insert_cols}
                 ) VALUES (
                     :provider_game_id, :game_signature, :sport, :league, :game_date, :home_team, :away_team,
                     :predicted_winner, :win_probability, :confidence_level,
                     :bet_type, :bet_units, :bet_recommendation,
                     :feature_snapshot, :model_name, :prediction_status,
                     :actual_home_score, :actual_away_score, :actual_winner, :correct,
-                    :created_at, :data_source, :is_fallback
+                    :created_at, :data_source, :is_fallback{lifecycle_insert_vals}
                 )
             """
             if _is_postgresql(engine):

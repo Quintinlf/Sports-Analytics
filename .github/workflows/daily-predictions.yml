@@ -27,8 +27,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-automation.txt
 
+      - name: Check Model Artifacts
+        run: python -m scripts.check_model_artifacts
+
       - name: Execute Daily Prediction Pipeline
         run: python scripts/cron_daily_predictions.py
+
+      - name: Settle Stale / Scored Predictions
+        if: success()
+        run: python -m scripts.settle_live_predictions --void-after-days 3
 
       - name: Preserve Error Artifacts
         if: failure()

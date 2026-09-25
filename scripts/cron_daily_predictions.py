@@ -115,6 +115,13 @@ def main() -> None:
 
     if success:
         _verify_usa_belgium(engine)
+        try:
+            from scripts.settle_live_predictions import settle
+
+            stats = settle(engine, void_after_days=3, dry_run=False)
+            logger.info("Post-ingest settlement: %s", stats)
+        except Exception as exc:
+            logger.warning("Settlement step failed (non-fatal): %s", exc)
 
     logger.info("=" * 80)
     if success:

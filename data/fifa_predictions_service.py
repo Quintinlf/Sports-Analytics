@@ -201,13 +201,16 @@ class FIFALivePredictionService:
                     risk_factors=explanation["risk_factors"],
                 )
 
+                utc_date = str(
+                    fixture.get("utc_date", datetime.today().strftime("%Y-%m-%d"))
+                )
                 row = {
                     "sport": "SOCCER",
                     "league": fixture.get("league", "International"),
                     "provider_game_id": str(fixture.get("id") or ""),
-                    "game_date": str(
-                        fixture.get("utc_date", datetime.today().strftime("%Y-%m-%d"))
-                    ).split("T")[0],
+                    "game_date": utc_date.split("T")[0],
+                    "start_time_utc": utc_date,
+                    "utc_date": utc_date,
                     "home_team": home_team,
                     "away_team": away_team,
                     "predicted_winner": predicted_winner,
@@ -221,6 +224,7 @@ class FIFALivePredictionService:
                     "data_source": "thesportsdb",
                     "is_fallback": False,
                     "prediction_status": "UPCOMING",
+                    "game_status": "SCHEDULED",
                     "actual_home_score": None,
                     "actual_away_score": None,
                     "actual_winner": None,
@@ -268,13 +272,14 @@ class FIFALivePredictionService:
             why_factors=[],
             risk_factors=[],
         )
+        utc_date = str(fixture.get("utc_date", datetime.today().strftime("%Y-%m-%d")))
         return {
             "sport": "SOCCER",
             "league": fixture.get("league", "International"),
             "provider_game_id": str(fixture.get("id") or ""),
-            "game_date": str(
-                fixture.get("utc_date", datetime.today().strftime("%Y-%m-%d"))
-            ).split("T")[0],
+            "game_date": utc_date.split("T")[0],
+            "start_time_utc": utc_date,
+            "utc_date": utc_date,
             "home_team": home_team,
             "away_team": away_team,
             "predicted_winner": "Scheduled",
@@ -288,6 +293,7 @@ class FIFALivePredictionService:
             "data_source": "thesportsdb",
             "is_fallback": True,
             "prediction_status": "UPCOMING",
+            "game_status": "SCHEDULED",
             "actual_home_score": None,
             "actual_away_score": None,
             "actual_winner": None,

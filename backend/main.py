@@ -23,6 +23,8 @@ from sqlalchemy import text
 from backend.db import DATABASE_URL, get_db_session, engine, require_engine
 from backend.models import AnalystFeedback, FeatureSuggestion
 from backend.routes.feedback import router as feedback_router, init_platform
+from backend.routes.leader import router as leader_router
+from backend.routes.poker import router as poker_router
 from scripts.db_utils import log_startup_database_diagnostics
 from backend.schemas import (
     FeedbackStatusResponse,
@@ -33,6 +35,8 @@ from backend.schemas import (
 )
 
 _FRONTEND_DIR = Path(__file__).parent.parent / "frontend" / "feedback"
+_POKER_DIR = Path(__file__).parent.parent / "frontend" / "poker"
+_LEADER_DIR = Path(__file__).parent.parent / "frontend" / "leader"
 
 logger = logging.getLogger(__name__)
 
@@ -274,6 +278,8 @@ app.add_middleware(
 
 # Register the new feedback platform router
 app.include_router(feedback_router)
+app.include_router(leader_router)
+app.include_router(poker_router)
 
 
 @app.on_event("startup")
@@ -356,6 +362,40 @@ def feedback_preview(
         traceback.print_exc()
         raise
     # #endregion
+
+
+@app.get("/leader", response_class=FileResponse, include_in_schema=False)
+@app.get("/leader/", response_class=FileResponse, include_in_schema=False)
+def leader_page() -> FileResponse:
+    return FileResponse(_LEADER_DIR / "index.html")
+
+
+@app.get("/leader/styles.css", include_in_schema=False)
+def leader_styles() -> FileResponse:
+    return FileResponse(_LEADER_DIR / "styles.css", media_type="text/css")
+
+
+@app.get("/leader/script.js", include_in_schema=False)
+def leader_script() -> FileResponse:
+    return FileResponse(_LEADER_DIR / "script.js", media_type="application/javascript")
+
+
+# ── Poker laboratory frontend ───────────────────────────────────────────────
+
+@app.get("/poker", response_class=FileResponse, include_in_schema=False)
+@app.get("/poker/", response_class=FileResponse, include_in_schema=False)
+def poker_page() -> FileResponse:
+    return FileResponse(_POKER_DIR / "index.html")
+
+
+@app.get("/poker/styles.css", include_in_schema=False)
+def poker_styles() -> FileResponse:
+    return FileResponse(_POKER_DIR / "styles.css", media_type="text/css")
+
+
+@app.get("/poker/script.js", include_in_schema=False)
+def poker_script() -> FileResponse:
+    return FileResponse(_POKER_DIR / "script.js", media_type="application/javascript")
 
 
 @app.get("/", include_in_schema=False)
