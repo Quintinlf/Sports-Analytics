@@ -611,7 +611,18 @@ async function init() {
     render();
   });
 
-  await resumeSession();
+  // /poker?play=1 (from the home page) deals straight in with the defaults;
+  // &opponent=<key> picks the archetype.
+  const resumed = await resumeSession();
+  const params = new URLSearchParams(window.location.search);
+  if (!resumed && params.has("play")) {
+    const opponent = params.get("opponent");
+    if (opponent && opponents.some((p) => p.key === opponent)) {
+      $("opponent-select").value = opponent;
+      updateOpponentHint();
+    }
+    await sitDown();
+  }
   updateLiveModeHint();
 }
 

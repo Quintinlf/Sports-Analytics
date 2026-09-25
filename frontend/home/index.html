@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sports Analytics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/home/home.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="inner">
+    <div class="logo">◎</div>
+    <div class="titles">
+      <h1>Sports Analytics</h1>
+      <p>Predictions · poker · the maths underneath both</p>
+    </div>
+  </div>
+</header>
+
+<main class="page">
+
+  <!-- You vs the AI -->
+  <section class="card mirror" id="mirror">
+    <div class="mirror-head">
+      <div>
+        <p class="section-title">You vs the AI</p>
+        <h2 id="mirror-verdict">Loading the scoreboard…</h2>
+      </div>
+      <a class="btn btn-ghost" id="mirror-pick-link" href="/feedback">Make a pick →</a>
+    </div>
+
+    <div class="score-row">
+      <div class="score">
+        <span class="score-label" id="mirror-you-label">You</span>
+        <span class="score-value" id="mirror-you">–</span>
+      </div>
+      <div class="score-vs">vs</div>
+      <div class="score">
+        <span class="score-label">AI</span>
+        <span class="score-value" id="mirror-ai">–</span>
+      </div>
+    </div>
+    <p class="muted" id="mirror-explain">
+      Every game you don't pick yourself, your pick is the model's pick. So until you
+      override it, this is the AI against itself. Only your overrides can move the score.
+    </p>
+
+    <div class="stat-grid" id="mirror-stats"></div>
+
+    <div class="mirror-lists">
+      <div>
+        <p class="section-title">Your next picks</p>
+        <ul class="game-list" id="mirror-upcoming"></ul>
+      </div>
+      <div>
+        <p class="section-title">Your recent overrides</p>
+        <ul class="game-list" id="mirror-recent"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sections -->
+  <section class="grid">
+    <article class="card section poker">
+      <div class="section-icon">♠</div>
+      <h3>Poker</h3>
+      <p>Heads-up No-Limit Hold'em against an AI opponent. Every number on screen is exact arithmetic on the hand in front of you.</p>
+      <a class="btn btn-primary btn-block" href="/poker?play=1">Deal me in →</a>
+      <p class="section-title chips-title">Or pick an opponent</p>
+      <div class="chips" id="opponent-chips"></div>
+      <a class="text-link" href="/poker">Table settings</a>
+    </article>
+
+    <article class="card section">
+      <div class="section-icon">∿</div>
+      <h3>Shuffle &amp; Fourier lab</h3>
+      <p>Why it takes seven riffles to mix a deck, and why cutting never does. Shown with the 52nd roots of unity.</p>
+      <a class="btn btn-ghost btn-block" href="/poker/lab">Open the lab →</a>
+    </article>
+
+    <article class="card section">
+      <div class="section-icon">▦</div>
+      <h3>Predictions</h3>
+      <p>Today's model predictions for NBA, MLB and soccer. Review them, disagree, and file postgame reflections.</p>
+      <a class="btn btn-ghost btn-block" id="predictions-link" href="/feedback">Review predictions →</a>
+    </article>
+
+    <article class="card section">
+      <div class="section-icon">◈</div>
+      <h3>Leader</h3>
+      <p>Pipeline health, analyst activity and model promotion.</p>
+      <a class="btn btn-ghost btn-block" href="/leader">Open leader view →</a>
+    </article>
+
+    <article class="card section pending">
+      <div class="section-icon">♞</div>
+      <h3>Chess</h3>
+      <p>Not built yet. It comes after the chess book is scanned, so the lessons follow the book.</p>
+      <span class="badge">Coming</span>
+    </article>
+  </section>
+
+</main>
+
+<script src="/home/home.js"></script>
+</body>
+</html>

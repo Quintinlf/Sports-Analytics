@@ -225,6 +225,36 @@ implementing S₅₂'s representations is research-scale, and unnecessary here:
 `shuffle_analysis` already gets the exact riffle answer combinatorially. This
 module does the abelian case properly rather than the non-abelian case badly.
 
+## On the web
+
+The home page (`/`) links every section. **Deal me in** opens `/poker?play=1`,
+which sits you down with the default table straight away (or resumes the hand
+you left); `&opponent=<key>` picks the archetype, and the home page lists them.
+
+`/poker/lab` is the shuffle laboratory as a page, served by
+`backend/routes/poker_lab.py` under `/api/poker/lab/`:
+
+| endpoint | what it returns | how |
+|---|---|---|
+| `riffles` | distance from random after m riffles | exact, per request |
+| `shuffle` | one seeded run of a procedure, every step | per request |
+| `cuts` | the cut distribution, its Fourier coefficients, the walk | exact, per request |
+| `procedures` | every procedure with its full `assess` report | stored |
+
+The cut distribution is computed exactly from `shuffle.cut`'s model (a rounded,
+clamped normal) rather than sampled, and the tests check it against 60,000 real
+cuts. The page draws each coefficient P̂(m) as the centre of mass of the cut
+probabilities wound m times round the 52nd roots of unity, then raises them to
+the k-th power and inverts the transform in the browser; the server's direct
+convolution checks that inversion at k = 1, 2, 3, 5, 10 and 25.
+
+`assess` takes 2-16 seconds per procedure, too slow for a request on the free
+web tier, and cutting the trial count would change the answers (the position
+test loses power and under-mixed decks start to pass). So the reports are
+stored: `python scripts/build_shuffle_lab.py` rewrites
+`poker/data/shuffle_lab.json` deterministically. Re-run it after changing
+`shuffle.py` or `shuffle_analysis.py`.
+
 ## Testing
 
 ```bash

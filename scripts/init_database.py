@@ -107,8 +107,12 @@ def initialize_database() -> list[str]:
                             for line in chunk.splitlines()
                         ):
                             continue
+                        # A savepoint per statement: in Postgres one failure aborts the
+                        # whole transaction, so without it a single already-applied or
+                        # conflicting statement would sink every migration after it.
                         try:
-                            conn.execute(sa_text(chunk))
+                            with conn.begin_nested():
+                                conn.execute(sa_text(chunk))
                         except Exception as exc:
                             print(f"WARNING: migration {sql_path.name}: {exc}")
     ensure_default_reviewers(engine)
