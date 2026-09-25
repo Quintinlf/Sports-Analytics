@@ -2,6 +2,8 @@
 
 const API = "";
 let reviewerId = null;
+const KEY_STORE = "leader_key";
+let leaderKey = (() => { try { return sessionStorage.getItem(KEY_STORE) || ""; } catch (_) { return ""; } })();
 
 function qs(id) { return document.getElementById(id); }
 
@@ -32,7 +34,7 @@ async function leaderFetch(path) {
   const url = reviewerId
     ? `${API}${path}${sep}reviewer_id=${encodeURIComponent(reviewerId)}`
     : `${API}${path}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: leaderKey ? { "X-Admin-Key": leaderKey } : {} });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.detail || `HTTP ${res.status}`);
@@ -210,6 +212,13 @@ async function loginByName() {
     err.style.display = "block";
     return;
   }
+  leaderKey = qs("leader-key").value.trim();
+  if (!leaderKey) {
+    err.textContent = "Enter the leader key (ADMIN_API_KEY on the server).";
+    err.style.display = "block";
+    return;
+  }
+  try { sessionStorage.setItem(KEY_STORE, leaderKey); } catch (_) { /* private mode: keep it in memory */ }
   try {
     const res = await fetch(`${API}/api/feedback/reviewers`, {
       method: "POST",

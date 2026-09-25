@@ -19,11 +19,14 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from math import comb
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from data.prediction_time import pacific_today, parse_start_time_utc
+
+_PACIFIC = ZoneInfo("America/Los_Angeles")
 
 #: Who the mirror belongs to. Set MODEL_MIRROR_REVIEWER to a reviewer id or name.
 DEFAULT_OWNER = "quintin"
@@ -43,13 +46,26 @@ def _norm(value: Optional[str]) -> str:
 
 
 def _has_clock_time(raw: Any) -> bool:
-    """A date-only start ('2026-09-24') says nothing about tip-off."""
+    """A date-only start ('2026-09-24') says nothing about tip-off.
+
+    Nor does exactly 12:00:00 Pacific: ``data.prediction_time`` stores that as a
+    stand-in when a provider gives only a date. Treating it as real would mark a
+    3 pm pick on a 7 pm game "late", so it counts as unknown (scored, flagged
+    unverified) -- which also covers the occasional real noon kickoff safely.
+    """
     if raw is None:
         return False
     if isinstance(raw, datetime):
-        return True
-    text = str(raw).strip()
-    return len(text) > 10
+        start = raw
+    else:
+        text = str(raw).strip()
+        if len(text) <= 10:
+            return False
+        start = parse_start_time_utc(text)
+        if start is None:
+            return False
+    local = start.astimezone(_PACIFIC) if start.tzinfo else start.replace(tzinfo=timezone.utc).astimezone(_PACIFIC)
+    return (local.hour, local.minute, local.second) != (12, 0, 0)
 
 
 @dataclass(frozen=True)

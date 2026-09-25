@@ -89,10 +89,13 @@ class TestLeaderApi(unittest.TestCase):
         self.assertIn("pipelines", body)
         self.assertIn("stale_predictions", body)
 
-        ok_role = self.client.get(
+        # A reviewer id is public (it appears in URLs), so it is not a credential.
+        id_only = self.client.get(
             f"/api/leader/health?reviewer_id={DEFAULT_REVIEWER_ID}"
         )
-        self.assertEqual(ok_role.status_code, 200)
+        self.assertEqual(id_only.status_code, 403)
+        wrong_key = self.client.get("/api/leader/health", headers={"X-Admin-Key": "guess"})
+        self.assertEqual(wrong_key.status_code, 403)
 
     def test_reviewers_and_performance(self) -> None:
         today = pacific_today()

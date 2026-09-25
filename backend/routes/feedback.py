@@ -1235,7 +1235,7 @@ def _upcoming_predictions_where_sql(eng) -> tuple[str, dict]:
 
     start, end = display_window(days_ahead=int(os.getenv("DASHBOARD_DAYS_AHEAD", "7")))
     cols = _column_names(eng, "predictions")
-    date_expr = "game_date_pacific" if "game_date_pacific" in cols else "game_date"
+    date_expr = "COALESCE(game_date_pacific, game_date)" if "game_date_pacific" in cols else "game_date"
     where = f"""
         UPPER(COALESCE(prediction_status, 'UPCOMING')) NOT IN ('SETTLED', 'VOID', 'FINAL')
         AND actual_home_score IS NULL

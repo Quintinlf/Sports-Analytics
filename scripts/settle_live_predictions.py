@@ -41,6 +41,42 @@ def _column_set(engine) -> set[str]:
     return set(_column_names(engine, "predictions") or set())
 
 
+def _settle_scored(conn, has_game_status: bool, dry_run: bool, stats: dict) -> None:
+    """Mark rows with both scores SETTLED (legacy FINAL rows included) and grade them."""
+    set_bits = ["prediction_status = :settled"]
+    if has_game_status:
+        set_bits.append("game_status = :game_final")
+    settle_sql = f"""
+        UPDATE predictions
+        SET {', '.join(set_bits)},
+            correct = CASE
+                WHEN actual_winner IS NOT NULL AND predicted_winner IS NOT NULL
+                     AND UPPER(predicted_winner) = UPPER(actual_winner)
+                THEN 1
+                WHEN actual_winner IS NOT NULL AND predicted_winner IS NOT NULL
+                THEN 0
+                ELSE correct
+            END
+        WHERE actual_home_score IS NOT NULL
+          AND actual_away_score IS NOT NULL
+          AND UPPER(COALESCE(prediction_status, '')) NOT IN ('SETTLED', 'VOID')
+    """
+    params = {"settled": PRED_SETTLED, "game_final": GAME_FINAL}
+    if dry_run:
+        n = conn.execute(
+            text(
+                "SELECT COUNT(*) FROM predictions "
+                "WHERE actual_home_score IS NOT NULL "
+                "AND actual_away_score IS NOT NULL "
+                "AND UPPER(COALESCE(prediction_status, '')) NOT IN ('SETTLED', 'VOID')"
+            )
+        ).scalar()
+        stats["settled"] = int(n or 0)
+    else:
+        result = conn.execute(text(settle_sql), params)
+        stats["settled"] = int(result.rowcount or 0)
+
+
 def settle(engine, void_after_days: int = 3, dry_run: bool = False) -> dict:
     ensure_unified_schema(engine)
     cols = _column_set(engine)
@@ -55,7 +91,27 @@ def settle(engine, void_after_days: int = 3, dry_run: bool = False) -> dict:
     stats = {"settled": 0, "voided": 0, "dry_run": dry_run}
 
     with engine.begin() as conn:
-        # Normalize legacy FINAL → SETTLED
+        # Scored rows first: give them a winner from the scores when the provider
+        # left it blank (equal scores are a draw, the name the soccer pipeline
+        # uses), so that settling them below also grades them.
+        winner_sql = """
+            UPDATE predictions
+            SET actual_winner = CASE
+                    WHEN actual_home_score > actual_away_score THEN home_team
+                    WHEN actual_away_score > actual_home_score THEN away_team
+                    ELSE 'Draw'
+                END
+            WHERE actual_winner IS NULL
+              AND actual_home_score IS NOT NULL
+              AND actual_away_score IS NOT NULL
+              AND UPPER(COALESCE(prediction_status, '')) NOT IN ('SETTLED', 'VOID')
+        """
+        if not dry_run:
+            stats["winners_derived"] = int(conn.execute(text(winner_sql)).rowcount or 0)
+        _settle_scored(conn, has_game_status, dry_run, stats)
+
+        # Then normalise legacy FINAL -> SETTLED for anything left (no scores),
+        # after scored FINAL rows have been graded above.
         if dry_run:
             n = conn.execute(
                 text(
@@ -74,40 +130,6 @@ def settle(engine, void_after_days: int = 3, dry_run: bool = False) -> dict:
             )
             stats["legacy_final"] = int(result.rowcount or 0)
 
-        # Settle rows that already have scores
-        set_bits = ["prediction_status = :settled"]
-        if has_game_status:
-            set_bits.append("game_status = :game_final")
-        settle_sql = f"""
-            UPDATE predictions
-            SET {', '.join(set_bits)},
-                correct = CASE
-                    WHEN actual_winner IS NOT NULL AND predicted_winner IS NOT NULL
-                         AND UPPER(predicted_winner) = UPPER(actual_winner)
-                    THEN 1
-                    WHEN actual_winner IS NOT NULL AND predicted_winner IS NOT NULL
-                    THEN 0
-                    ELSE correct
-                END
-            WHERE actual_home_score IS NOT NULL
-              AND actual_away_score IS NOT NULL
-              AND UPPER(COALESCE(prediction_status, '')) NOT IN ('SETTLED', 'VOID')
-        """
-        params = {"settled": PRED_SETTLED, "game_final": GAME_FINAL}
-        if dry_run:
-            n = conn.execute(
-                text(
-                    "SELECT COUNT(*) FROM predictions "
-                    "WHERE actual_home_score IS NOT NULL "
-                    "AND actual_away_score IS NOT NULL "
-                    "AND UPPER(COALESCE(prediction_status, '')) NOT IN ('SETTLED', 'VOID')"
-                )
-            ).scalar()
-            stats["settled"] = int(n or 0)
-        else:
-            result = conn.execute(text(settle_sql), params)
-            stats["settled"] = int(result.rowcount or 0)
-
         # Void stale upcoming rows with no scores past cutoff
         date_col = "game_date_pacific" if has_pacific else "game_date"
         void_sql = f"""
@@ -115,6 +137,7 @@ def settle(engine, void_after_days: int = 3, dry_run: bool = False) -> dict:
             SET prediction_status = :void
             WHERE UPPER(COALESCE(prediction_status, '')) IN ('UPCOMING', 'ACTIVE', '')
               AND actual_home_score IS NULL
+              AND actual_away_score IS NULL
               AND {date_col} IS NOT NULL
               AND CAST({date_col} AS TEXT) < :cutoff
         """
@@ -125,6 +148,7 @@ def settle(engine, void_after_days: int = 3, dry_run: bool = False) -> dict:
                     SELECT COUNT(*) FROM predictions
                     WHERE UPPER(COALESCE(prediction_status, '')) IN ('UPCOMING', 'ACTIVE', '')
                       AND actual_home_score IS NULL
+                      AND actual_away_score IS NULL
                       AND {date_col} IS NOT NULL
                       AND CAST({date_col} AS TEXT) < :cutoff
                     """

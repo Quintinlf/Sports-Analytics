@@ -1210,6 +1210,43 @@ def insert_prediction(engine: Engine, prediction_data: Dict[str, Any]) -> int:
 
             if existing:
                 prediction_id = int(existing[0])
+                # Once a game has a result (or is SETTLED/VOID) the row is history:
+                # a schedule re-sync must not blank the score, reopen the status or
+                # swap the model's recorded pick, or settlement and pick grading lose
+                # the game. Only missing result fields may be filled in.
+                current = conn.execute(
+                    text(
+                        "SELECT prediction_status, actual_winner, actual_home_score, actual_away_score "
+                        "FROM predictions WHERE prediction_id = :pid"
+                    ),
+                    {"pid": prediction_id},
+                ).mappings().first()
+                terminal = bool(current) and (
+                    str(current["prediction_status"] or "").upper() in ("SETTLED", "VOID", "FINAL")
+                    or current["actual_winner"] is not None
+                    or (current["actual_home_score"] is not None and current["actual_away_score"] is not None)
+                )
+                if terminal:
+                    conn.execute(
+                        text(
+                            """
+                            UPDATE predictions
+                            SET actual_home_score = COALESCE(actual_home_score, :actual_home_score),
+                                actual_away_score = COALESCE(actual_away_score, :actual_away_score),
+                                actual_winner = COALESCE(actual_winner, :actual_winner),
+                                correct = COALESCE(correct, :correct)
+                            WHERE prediction_id = :prediction_id
+                            """
+                        ),
+                        {
+                            "actual_home_score": params["actual_home_score"],
+                            "actual_away_score": params["actual_away_score"],
+                            "actual_winner": params["actual_winner"],
+                            "correct": params["correct"],
+                            "prediction_id": prediction_id,
+                        },
+                    )
+                    return prediction_id
                 lifecycle_set = "".join(
                     f",\n                            {c} = :{c}" for c in lifecycle_cols
                 )
@@ -1233,10 +1270,10 @@ def insert_prediction(engine: Engine, prediction_data: Dict[str, Any]) -> int:
                             feature_snapshot = :feature_snapshot,
                             model_name = :model_name,
                             prediction_status = :prediction_status,
-                            actual_home_score = :actual_home_score,
-                            actual_away_score = :actual_away_score,
-                            actual_winner = :actual_winner,
-                            correct = :correct,
+                            actual_home_score = COALESCE(:actual_home_score, actual_home_score),
+                            actual_away_score = COALESCE(:actual_away_score, actual_away_score),
+                            actual_winner = COALESCE(:actual_winner, actual_winner),
+                            correct = COALESCE(:correct, correct),
                             data_source = :data_source,
                             is_fallback = :is_fallback{lifecycle_set}
                         WHERE prediction_id = :prediction_id

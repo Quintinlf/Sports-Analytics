@@ -69,6 +69,13 @@ def enrich_prediction_times(row: Dict[str, Any]) -> Dict[str, Any]:
     """
     timed = row.get("start_time_utc") or row.get("game_datetime") or row.get("utc_date")
     date_only = str(row.get("game_date") or "").strip()
+    # A bare YYYY-MM-DD in a "time" field carries no clock time; reading it as
+    # UTC midnight would move US evening games to the previous Pacific day.
+    if isinstance(timed, str) and len(timed.strip()) == 10 and timed.strip()[4] == "-":
+        date_only = date_only or timed.strip()
+        if len(date_only) < 10:
+            date_only = timed.strip()
+        timed = None
 
     if timed:
         start = parse_start_time_utc(timed)

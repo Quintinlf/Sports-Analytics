@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import hmac
 import os
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
@@ -36,25 +37,18 @@ def _require_leader(
     reviewer_id: Optional[str],
     x_admin_key: Optional[str],
 ) -> None:
+    """Leader data (reviewer emails, activity, provenance) needs the secret key.
+
+    A reviewer id is a public identifier -- the page itself puts it in the URL --
+    so it can never be proof of access on its own. ``reviewer_id`` is kept in the
+    signature so existing callers still work, but only ``X-Admin-Key`` matching
+    ADMIN_API_KEY grants access. With no key configured, access is refused.
+    """
     expected = os.getenv("ADMIN_API_KEY", "").strip()
-    if expected and (x_admin_key or "").strip() == expected:
+    supplied = (x_admin_key or "").strip()
+    if expected and supplied and hmac.compare_digest(supplied, expected):
         return
-
-    rid = (reviewer_id or "").strip()
-    if rid:
-        row = session.execute(
-            text(
-                """
-                SELECT analyst_role FROM reviewers
-                WHERE reviewer_id = :rid
-                """
-            ),
-            {"rid": rid},
-        ).mappings().first()
-        if row and str(row.get("analyst_role") or "").strip().lower() == "leader":
-            return
-
-    raise HTTPException(status_code=403, detail="Leader access required")
+    raise HTTPException(status_code=403, detail="Leader access requires the leader key")
 
 
 def _db_fingerprint(url: str) -> str:
