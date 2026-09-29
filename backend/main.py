@@ -28,6 +28,7 @@ from backend.routes.poker import router as poker_router
 from backend.routes.poker_lab import router as poker_lab_router
 from backend.routes.mirror import router as mirror_router
 from backend.routes.lottery import router as lottery_router
+from backend.routes.chess import router as chess_router
 from scripts.db_utils import log_startup_database_diagnostics
 from backend.schemas import (
     FeedbackStatusResponse,
@@ -41,6 +42,8 @@ _FRONTEND_DIR = Path(__file__).parent.parent / "frontend" / "feedback"
 _POKER_DIR = Path(__file__).parent.parent / "frontend" / "poker"
 _LEADER_DIR = Path(__file__).parent.parent / "frontend" / "leader"
 _HOME_DIR = Path(__file__).parent.parent / "frontend" / "home"
+_CHESS_DIR = Path(__file__).parent.parent / "frontend" / "chess"
+_WORKSPACE_DIR = Path(__file__).parent.parent / "frontend" / "workspace"
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +290,7 @@ app.include_router(poker_router)
 app.include_router(poker_lab_router)
 app.include_router(mirror_router)
 app.include_router(lottery_router)
+app.include_router(chess_router)
 
 
 @app.on_event("startup")
@@ -414,6 +418,40 @@ def poker_lab_page() -> FileResponse:
 @app.get("/poker/lab.js", include_in_schema=False)
 def poker_lab_script() -> FileResponse:
     return FileResponse(_POKER_DIR / "lab.js", media_type="application/javascript")
+
+
+@app.get("/poker/learn", response_class=FileResponse, include_in_schema=False)
+@app.get("/poker/learn/", response_class=FileResponse, include_in_schema=False)
+def poker_learn_page() -> FileResponse:
+    return FileResponse(_POKER_DIR / "learn.html")
+
+
+@app.get("/poker/learn.js", include_in_schema=False)
+def poker_learn_script() -> FileResponse:
+    return FileResponse(_POKER_DIR / "learn.js", media_type="application/javascript")
+
+
+# ── Chess and the side-by-side workspace ────────────────────────────────────
+
+@app.get("/chess", response_class=FileResponse, include_in_schema=False)
+@app.get("/chess/", response_class=FileResponse, include_in_schema=False)
+def chess_page() -> FileResponse:
+    return FileResponse(_CHESS_DIR / "index.html")
+
+
+@app.get("/chess/{asset}", include_in_schema=False)
+def chess_asset(asset: str) -> FileResponse:
+    media = {"chess.css": "text/css", "chess.js": "application/javascript",
+             "coach.js": "application/javascript", "lessons.js": "application/javascript"}
+    if asset not in media:
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(_CHESS_DIR / asset, media_type=media[asset])
+
+
+@app.get("/workspace", response_class=FileResponse, include_in_schema=False)
+@app.get("/workspace/", response_class=FileResponse, include_in_schema=False)
+def workspace_page() -> FileResponse:
+    return FileResponse(_WORKSPACE_DIR / "index.html")
 
 
 # ── Home: one page linking every section ────────────────────────────────────

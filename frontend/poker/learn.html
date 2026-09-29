@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Learn Poker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/poker/styles.css?v=coach1" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="inner">
+    <div class="logo">♠</div>
+    <div class="titles">
+      <h1>Learn to play poker</h1>
+      <p>Texas Hold'em from zero, then how to beat each kind of player</p>
+    </div>
+    <nav class="site-nav">
+      <a href="/">Home</a>
+      <a href="/poker">Play with the coach</a>
+    </nav>
+  </div>
+</header>
+
+<main class="learn-wrap">
+  <nav class="learn-toc" id="toc" aria-label="Lessons"></nav>
+
+  <section class="lesson" id="goal">
+    <p class="section-title">Lesson 1</p>
+    <h2>What you're trying to do</h2>
+    <p>Win chips. You win the chips in the middle (the <b>pot</b>) in one of two ways:</p>
+    <ul>
+      <li>At the end, the cards are turned over (the <b>showdown</b>) and your best five cards beat theirs, or</li>
+      <li>You bet and they give up (<b>fold</b>) before the end. Then nobody shows anything and the pot is yours.</li>
+    </ul>
+    <p>That second way is why poker isn't just luck: you can win with bad cards, and lose with good ones.</p>
+  </section>
+
+  <section class="lesson" id="cards">
+    <p class="section-title">Lesson 2</p>
+    <h2>Your cards and the table's cards</h2>
+    <p>You get <b>two cards only you see</b>. Then five cards are dealt face up in the middle, shared by both players:</p>
+    <ul>
+      <li>three at once: <b>the flop</b></li>
+      <li>then one more: <b>the turn</b></li>
+      <li>then the last one: <b>the river</b></li>
+    </ul>
+    <p>Your hand is the <b>best five cards</b> you can make from your two plus the five on the table. You can use both of
+      yours, one, or none.</p>
+    <div class="deal-demo" id="deal-demo"></div>
+  </section>
+
+  <section class="lesson" id="ranks">
+    <p class="section-title">Lesson 3</p>
+    <h2>Which hands beat which</h2>
+    <p>Best at the top. Suits never beat each other. If two hands are the same kind, the higher cards win; if
+      they're exactly equal, the pot is split.</p>
+    <div class="rank-list" id="rank-list"></div>
+    <div class="quiz" id="quiz">
+      <p class="section-title">Practice: which hand wins?</p>
+      <p class="hint" id="quiz-prompt"></p>
+      <div class="quiz-board" id="quiz-board"></div>
+      <div class="quiz-hands" id="quiz-hands"></div>
+      <p class="quiz-feedback" id="quiz-feedback"></p>
+      <div class="row">
+        <button class="btn btn-ghost" id="quiz-tie">It's a tie</button>
+        <button class="btn btn-primary" id="quiz-next">Another one</button>
+      </div>
+      <p class="hint" id="quiz-score"></p>
+    </div>
+  </section>
+
+  <section class="lesson" id="flow">
+    <p class="section-title">Lesson 4</p>
+    <h2>How one hand goes (two players)</h2>
+    <ol>
+      <li><b>Blinds.</b> Before any cards, both players put in a small forced bet so there's something to play for:
+        the <b>small blind</b> (1 chip here) and the <b>big blind</b> (2 chips).</li>
+      <li><b>The button.</b> With two players, the player with the dealer button pays the small blind. The button
+        switches every hand.</li>
+      <li><b>Before the flop</b> the button acts first. <b>After the flop</b> the other player acts first on every
+        round, so the button gets to see what they do before choosing.</li>
+      <li><b>Four rounds of betting:</b> before the flop, after the flop, after the turn, after the river.</li>
+      <li><b>Showdown.</b> If nobody folded, both show and the best five cards win the pot.</li>
+    </ol>
+  </section>
+
+  <section class="lesson" id="choices">
+    <p class="section-title">Lesson 5</p>
+    <h2>Your choices on your turn</h2>
+    <dl class="choices">
+      <dt>Check</dt><dd>Pass without betting. Only possible when nobody has bet this round.</dd>
+      <dt>Bet</dt><dd>Put chips in when nobody has yet. The other player must call, raise or fold.</dd>
+      <dt>Call</dt><dd>Match the bet in front of you.</dd>
+      <dt>Raise</dt><dd>Bet more than the bet in front of you. In no-limit, a raise must be at least as big as the
+        last bet or raise, and you can go up to everything you have (<b>all-in</b>).</dd>
+      <dt>Fold</dt><dd>Give up the hand. The chips you already put in stay in the pot.</dd>
+    </dl>
+    <p>If you can't afford the whole bet, you can still call all-in; you can only win as much from them as you
+      put in.</p>
+  </section>
+
+  <section class="lesson" id="start">
+    <p class="section-title">Lesson 6</p>
+    <h2>Which hands to play</h2>
+    <ul>
+      <li>With only two players you play <b>many more hands</b> than at a full table: the blinds come around every
+        hand, so waiting only for great cards bleeds chips.</li>
+      <li>Good hands to start with: <b>any pair</b>, <b>two high cards</b> (ace, king, queen, jack, ten), and
+        <b>an ace with a card of the same suit</b>.</li>
+      <li>Hands like 7-2 or 9-3 of different suits are the ones to fold, unless you can see the flop for free.</li>
+      <li>Being <b>last to act</b> after the flop (having the button) helps: you see their choice first.</li>
+    </ul>
+  </section>
+
+  <section class="lesson" id="price">
+    <p class="section-title">Lesson 7</p>
+    <h2>The price of a call</h2>
+    <p>Say the pot is 10 and they bet 5. Calling costs you 5, and if you win you get the whole pot: 10 + their 5 +
+      your 5 = 20.</p>
+    <p class="big-line">You pay 5 to win 20, so you need to win at least <b>5 ÷ 20 = 25%</b> of the time.</p>
+    <p>If your hand wins more often than that, calling makes chips over many hands, even when you lose this one. If
+      it wins less, fold. The coach at the table works this out every time it stops you, and tells you how often your
+      hand wins against the cards <i>that opponent</i> plays.</p>
+    <div class="price-calc">
+      <label>Pot <input type="number" id="pc-pot" class="input" value="10" min="0" /></label>
+      <label>Their bet <input type="number" id="pc-bet" class="input" value="5" min="1" /></label>
+      <p id="pc-out" class="big-line"></p>
+    </div>
+  </section>
+
+  <section class="lesson" id="why-bet">
+    <p class="section-title">Lesson 8</p>
+    <h2>Every bet needs a reason</h2>
+    <ul>
+      <li><b>A value bet</b>: you bet because a worse hand will call. You get paid.</li>
+      <li><b>A bluff</b>: you bet because a better hand will fold. You steal the pot.</li>
+    </ul>
+    <p>If neither is true, checking is usually better. Which one works depends on who you're playing: a player who
+      never folds is great to value bet and terrible to bluff. That's the last lesson.</p>
+  </section>
+
+  <section class="lesson" id="opponents">
+    <p class="section-title">Lesson 9</p>
+    <h2>How to beat each kind of player</h2>
+    <p>Each opponent here follows written rules. The numbers below are measured from those rules, not guessed.
+      Play them with the coach on; it stops you when a choice matters and explains it.</p>
+    <div id="opponent-lessons"><p class="hint">Loading…</p></div>
+  </section>
+</main>
+
+<script src="/poker/learn.js?v=coach1"></script>
+</body>
+</html>

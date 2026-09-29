@@ -17,6 +17,15 @@ let opponents = [];
 let modes = [];
 let mathRevealed = false; // per-decision reveal in intermediate mode
 
+// Coach mode: when to stop the hand (a per-browser preference), and what was already shown.
+const STOP_KEY = "poker_coach_stops";
+let stopSetting = "every";
+try { stopSetting = localStorage.getItem(STOP_KEY) || "every"; } catch (_) { /* storage blocked */ }
+let coachShownFor = null; // decision key the coach already stopped for
+let recapShownFor = null; // hand id whose recap was already shown
+const GRADE_WORD = { good: "Good", ok: "Fine", mistake: "Mistake" };
+const ACTION_WORD = { fold: "Fold", check: "Check", call: "Call", bet: "Bet", raise: "Raise" };
+
 // ── Helpers ────────────────────────────────────────────────
 
 const $ = (id) => document.getElementById(id);
@@ -190,9 +199,153 @@ function render() {
 
   renderBanner(hand, complete);
   renderActions(hand, complete);
-  renderMathPanel(complete);
+  const coaching = state.learning_mode === "coach";
+  $("math-panel").hidden = coaching;
+  $("coach-panel").hidden = !coaching;
+  if (!coaching) renderMathPanel(complete);
   renderLog(hand);
   renderSession();
+  maybeCoach();
+}
+
+// ── The coach ──────────────────────────────────────────────
+
+function decisionKey() {
+  return state && state.hand ? `${state.hand.hand_id}:${state.hand.action_log.length}` : null;
+}
+
+/* Stop the hand when the coach has something to say, per the "Stop me" setting. */
+function maybeCoach() {
+  if (!state || state.learning_mode !== "coach") { closeCoach(); return; }
+  const hand = state.hand;
+  const coach = state.coach;
+  $("ask-coach-btn").disabled = !coach;
+  $("coach-panel-hint").textContent = coach ? coach.advice : "The coach speaks when it's your turn.";
+  if (hand.is_complete) {
+    const recap = state.recap;
+    const hadMistake = recap && recap.decisions.some((d) => d.grade === "mistake");
+    if (recap && recapShownFor !== hand.hand_id && (stopSetting !== "mistakes" || hadMistake)) {
+      recapShownFor = hand.hand_id;
+      showRecap(recap);
+    }
+    return;
+  }
+  if (!coach || !state.awaiting_hero || coachShownFor === decisionKey()) return;
+  const stop = stopSetting === "every" || (stopSetting === "big" && (coach.big_moment || coach.first_choice));
+  if (stop) {
+    coachShownFor = decisionKey();
+    showCoach(coach);
+  }
+}
+
+function openCoach(kicker, title) {
+  $("coach-kicker").textContent = kicker;
+  $("coach-title").textContent = title;
+  clear($("coach-body"));
+  clear($("coach-actions"));
+  $("coach-backdrop").hidden = false;
+}
+
+function closeCoach() { $("coach-backdrop").hidden = true; }
+
+function para(parent, text, className) {
+  const p = document.createElement("p");
+  if (className) p.className = className;
+  p.textContent = text;
+  parent.appendChild(p);
+  return p;
+}
+
+function gradeChip(grade) {
+  const chip = document.createElement("span");
+  chip.className = `grade grade-${grade}`;
+  chip.textContent = GRADE_WORD[grade] || grade;
+  return chip;
+}
+
+function coachButton(label, className, handler) {
+  const button = document.createElement("button");
+  button.className = `btn ${className}`;
+  button.textContent = label;
+  button.addEventListener("click", handler);
+  $("coach-actions").appendChild(button);
+  return button;
+}
+
+/* Before a decision: what's going on, what the coach would do, and each option graded. */
+function showCoach(coach) {
+  openCoach(`Coach · ${prettyStreet(coach.street)}`, "Here's what's going on");
+  const body = $("coach-body");
+  const list = document.createElement("ul");
+  list.className = "coach-lines";
+  coach.lines.forEach((line) => {
+    const li = document.createElement("li");
+    li.textContent = line;
+    list.appendChild(li);
+  });
+  body.appendChild(list);
+  para(body, coach.advice, "coach-advice");
+  para(body, coach.opponent_tip, "coach-tip");
+
+  const options = document.createElement("div");
+  options.className = "coach-options";
+  const order = ["fold", "check", "call", "bet", "raise"];
+  order.filter((a) => coach.verdicts[a]).forEach((action) => {
+    const v = coach.verdicts[action];
+    const row = document.createElement("div");
+    row.className = "coach-option";
+    const head = document.createElement("div");
+    head.className = "coach-option-head";
+    const name = document.createElement("strong");
+    name.textContent = ACTION_WORD[action];
+    head.append(name, gradeChip(v.grade));
+    row.appendChild(head);
+    para(row, v.why);
+    options.appendChild(row);
+  });
+  body.appendChild(options);
+  para(body, coach.model, "coach-model");
+  coachButton("Got it, let me choose", "btn-primary", closeCoach).focus();
+}
+
+/* After clicking a choice the coach grades as a mistake: explain, and let them change it. */
+function showHoldOn(action, amount, verdict) {
+  openCoach("Coach", `Hold on: ${ACTION_WORD[action].toLowerCase()} is a mistake here`);
+  para($("coach-body"), verdict.why, "coach-advice");
+  if (state.coach) para($("coach-body"), state.coach.advice, "coach-tip");
+  coachButton("Change my move", "btn-primary", closeCoach).focus();
+  coachButton(`${ACTION_WORD[action]} anyway`, "btn-ghost", () => {
+    closeCoach();
+    submit(action, amount, true);
+  });
+}
+
+/* After the hand: what happened, how each choice graded, the one thing to take away. */
+function showRecap(recap) {
+  const net = recap.net;
+  openCoach("Coach · hand over", net > 0 ? `You won ${net} chips` : net < 0 ? `You lost ${-net} chips` : "Even hand");
+  const body = $("coach-body");
+  recap.lines.forEach((line) => para(body, line));
+  if (recap.decisions.length) {
+    const options = document.createElement("div");
+    options.className = "coach-options";
+    recap.decisions.forEach((d) => {
+      const row = document.createElement("div");
+      row.className = "coach-option";
+      const head = document.createElement("div");
+      head.className = "coach-option-head";
+      const name = document.createElement("strong");
+      name.textContent = `${prettyStreet(d.street)}: you chose ${d.action}`;
+      head.append(name, gradeChip(d.grade));
+      row.appendChild(head);
+      if (d.grade !== "good") para(row, d.why);
+      options.appendChild(row);
+    });
+    body.appendChild(options);
+  }
+  para(body, recap.takeaway, "coach-advice");
+  coachButton("Next hand →", "btn-primary", () => { closeCoach(); nextHand(); }).focus();
+  coachButton("Look at the table", "btn-ghost", closeCoach);
 }
 
 function renderSeat(which, player, index, hand, complete) {
@@ -353,8 +506,13 @@ function openRaisePanel(legal, label) {
   panel.hidden = false;
 }
 
-async function submit(action, amount = 0) {
+async function submit(action, amount = 0, confirmed = false) {
   $("action-error").textContent = "";
+  const verdict = state.coach && state.coach.verdicts[action];
+  if (!confirmed && state.learning_mode === "coach" && verdict && verdict.grade === "mistake") {
+    showHoldOn(action, amount, verdict);
+    return;
+  }
   try {
     state = await api(`/sessions/${state.session_id}/actions`, {
       method: "POST",
@@ -611,10 +769,22 @@ async function init() {
     render();
   });
 
+  $("stop-select").value = stopSetting;
+  $("stop-select").addEventListener("change", (event) => {
+    stopSetting = event.target.value;
+    try { localStorage.setItem(STOP_KEY, stopSetting); } catch (_) { /* storage blocked */ }
+  });
+  $("ask-coach-btn").addEventListener("click", () => { if (state && state.coach) showCoach(state.coach); });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !$("coach-backdrop").hidden) closeCoach();
+  });
+
   // /poker?play=1 (from the home page) deals straight in with the defaults;
-  // &opponent=<key> picks the archetype.
-  const resumed = await resumeSession();
+  // &opponent=<key> picks the archetype and always starts a fresh table against it
+  // (the lessons on /poker/learn link here).
   const params = new URLSearchParams(window.location.search);
+  if (params.has("play") && params.get("opponent")) localStorage.removeItem(STORAGE_KEY);
+  const resumed = await resumeSession();
   if (!resumed && params.has("play")) {
     const opponent = params.get("opponent");
     if (opponent && opponents.some((p) => p.key === opponent)) {

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chess</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/chess/chess.css?v=coach1" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="inner">
+    <a class="logo" href="/" aria-label="Home">♞</a>
+    <div class="titles">
+      <h1>Chess</h1>
+      <p>Play Stockfish, get every game reviewed, see how you play</p>
+    </div>
+    <nav class="header-links">
+      <a href="/">Home</a>
+      <a href="/workspace">Side by side</a>
+    </nav>
+  </div>
+</header>
+
+<main class="chess-page">
+  <section class="board-col">
+    <div class="board-wrap">
+      <div class="eval-bar" id="eval-bar" title="Evaluation (White's side)"><div class="eval-fill" id="eval-fill"></div></div>
+      <div class="board" id="board" aria-label="Chess board"></div>
+    </div>
+    <div class="board-controls">
+      <button type="button" id="btn-first" aria-label="First position">⏮</button>
+      <button type="button" id="btn-prev" aria-label="Previous move">◀</button>
+      <button type="button" id="btn-next" aria-label="Next move">▶</button>
+      <button type="button" id="btn-last" aria-label="Last position">⏭</button>
+      <button type="button" id="btn-flip">Flip</button>
+    </div>
+    <p class="status" id="status">Pick your side and a level, then start.</p>
+    <div class="promo" id="promo" hidden>
+      <span>Promote to</span>
+      <button type="button" data-piece="q">♛</button>
+      <button type="button" data-piece="r">♜</button>
+      <button type="button" data-piece="b">♝</button>
+      <button type="button" data-piece="n">♞</button>
+    </div>
+  </section>
+
+  <section class="side-col">
+    <nav class="tabs" role="tablist">
+      <button type="button" class="tab active" data-tab="play" role="tab">Play</button>
+      <button type="button" class="tab" data-tab="learn" role="tab">Learn</button>
+      <button type="button" class="tab" data-tab="review" role="tab">Review</button>
+      <button type="button" class="tab" data-tab="games" role="tab">Your games</button>
+      <button type="button" class="tab" data-tab="profile" role="tab">How you play</button>
+      <button type="button" class="tab" data-tab="tips" role="tab">Tips</button>
+    </nav>
+
+    <div class="panel" id="panel-play">
+      <div class="setting">
+        <label for="side">You play</label>
+        <select id="side">
+          <option value="w">White</option>
+          <option value="b">Black</option>
+          <option value="r">Random</option>
+        </select>
+      </div>
+      <div class="setting">
+        <label for="opponent">Opponent</label>
+        <select id="opponent"></select>
+        <p class="hint" id="opponent-hint"></p>
+      </div>
+      <div class="setting">
+        <label for="level">Level <span id="level-out">3</span></label>
+        <input type="range" id="level" min="1" max="8" step="1" value="3" />
+        <p class="hint" id="level-hint">Casual: makes real mistakes.</p>
+      </div>
+      <div class="setting">
+        <label for="coach-mode">Coach</label>
+        <select id="coach-mode">
+          <option value="threats">Stop me for threats, chances and mistakes</option>
+          <option value="mistakes">Only stop me before a mistake</option>
+          <option value="off">Off</option>
+        </select>
+      </div>
+      <div class="row">
+        <button type="button" class="btn btn-primary" id="btn-start">Start game</button>
+        <button type="button" class="btn btn-ghost" id="btn-undo" disabled>Take back</button>
+        <button type="button" class="btn btn-ghost" id="btn-resign" disabled>Resign</button>
+      </div>
+      <p class="hint" id="engine-status">Loading Stockfish…</p>
+      <p class="section-title">Moves</p>
+      <ol class="movelist" id="movelist"></ol>
+      <p class="hint" id="games-count"></p>
+    </div>
+
+    <div class="panel" id="panel-learn" hidden>
+      <div id="lesson-view" hidden>
+        <p class="section-title" id="lesson-kicker"></p>
+        <h3 class="lesson-title" id="lesson-title"></h3>
+        <div id="lesson-text"></div>
+        <p class="lesson-feedback" id="lesson-feedback"></p>
+        <div class="row">
+          <button type="button" class="btn btn-ghost" id="lesson-retry">Try again</button>
+          <button type="button" class="btn btn-ghost" id="lesson-list-btn">All lessons</button>
+          <button type="button" class="btn btn-primary" id="lesson-next">Next lesson →</button>
+        </div>
+      </div>
+      <div id="lesson-index">
+        <p class="section-title">The rules, on the board</p>
+        <ol class="lesson-list" id="lesson-list"></ol>
+        <p class="section-title">Beat each style</p>
+        <div id="style-list"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-review" hidden>
+      <div class="progress" id="analysis-progress" hidden>
+        <p id="analysis-label">Analysing…</p>
+        <div class="progress-track"><div class="progress-fill" id="analysis-fill"></div></div>
+      </div>
+      <div id="review-body"><p class="hint">Finish a game, or open one from Your games, to see its review.</p></div>
+    </div>
+
+    <div class="panel" id="panel-games" hidden>
+      <div id="games-body"><p class="hint">Loading…</p></div>
+    </div>
+
+    <div class="panel" id="panel-profile" hidden>
+      <div id="profile-body"><p class="hint">Loading…</p></div>
+    </div>
+
+    <div class="panel" id="panel-tips" hidden>
+      <div id="tips-body"><p class="hint">Loading…</p></div>
+    </div>
+  </section>
+</main>
+
+<div class="coach-backdrop" id="coach-backdrop" hidden>
+  <div class="coach-card" role="dialog" aria-modal="true" aria-labelledby="coach-title">
+    <p class="section-title" id="coach-kicker">Coach</p>
+    <h3 id="coach-title"></h3>
+    <div id="coach-body"></div>
+    <div class="coach-actions" id="coach-actions"></div>
+  </div>
+</div>
+
+<script type="module" src="/chess/chess.js?v=coach1"></script>
+</body>
+</html>

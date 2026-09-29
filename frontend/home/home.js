@@ -227,3 +227,15 @@ document.addEventListener("DOMContentLoaded", () => {
   loadPowerball();
   wirePowerballForm();
 });
+
+// Chess card: games played and record, from the same identity as picks.
+fetch("/api/chess/profile")
+  .then((r) => (r.ok ? r.json() : null))
+  .then((p) => {
+    if (!p || !p.games) return;
+    const r = p.record;
+    document.getElementById("chess-record").textContent =
+      `${p.games} game${p.games === 1 ? "" : "s"} played: ${r.win} won, ${r.draw} drawn, ${r.loss} lost. ` +
+      (p.summary && p.summary[0] ? p.summary[0] : "");
+  })
+  .catch(() => {});

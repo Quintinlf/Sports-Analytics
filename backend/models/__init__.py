@@ -16,6 +16,7 @@ __all__ = [
     "AnalystComment",
     "AnalystFeedback",
     "AnalystQuestion",
+    "ChessGame",
     "FeatureSuggestion",
     "LotteryPick",
     "PickGrade",
@@ -268,3 +269,27 @@ class LotteryPick(Base):
     prize: Mapped[int | None] = mapped_column(Integer, nullable=True)
     jackpot: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     graded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class ChessGame(Base):
+    """A game played on /chess, with the coach's review stored alongside it.
+
+    ``owner`` is the same identity as picks and Powerball tickets (a reviewer id, resolved like
+    sign-in). ``review`` is the JSON from ``chess_coach.review_game``: every move explained, the
+    principles the game broke, and the habits the style profile is built from.
+    """
+
+    __tablename__ = "chess_games"
+
+    game_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    owner: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    played_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    player_color: Mapped[str] = mapped_column(String(5), nullable=False)
+    opponent: Mapped[str] = mapped_column(String(40), nullable=False)
+    result: Mapped[str] = mapped_column(String(7), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(10), nullable=False)
+    moves_uci: Mapped[str] = mapped_column(Text, nullable=False)
+    eco: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    opening: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    acpl: Mapped[float | None] = mapped_column(nullable=True)
+    review: Mapped[str] = mapped_column(Text, nullable=False)

@@ -18,9 +18,34 @@ from typing import Optional
 from poker.engine.rules import LegalActions
 from poker.engine.state import Action, ActionType, HandState, Player, Street
 from poker.opponents.base import DEFAULT_PROFILE_KEY, OpponentProfile, get_profile
-from poker.strength import hand_strength
+from poker.strength import hand_strength, preflop_cutoff
 
-__all__ = ["HeuristicOpponent"]
+__all__ = ["HeuristicOpponent", "defend_chance", "raise_band"]
+
+
+def raise_band(profile: OpponentProfile) -> float:
+    """Share of starting hands eligible for a preflop raise, so that eligible x aggression = PFR."""
+    return min(1.0, profile.pfr / profile.aggression) if profile.aggression > 0 else 0.0
+
+
+def defend_chance(profile: OpponentProfile, strength: float, to_call: int, pot_before: int) -> float:
+    """Chance of continuing against a bet of ``to_call`` into ``pot_before``.
+
+    A hand that clears both the price (pot odds) and the profile's call threshold always
+    continues. A marginal hand -- one that clears only one of the two -- continues unless the
+    opponent folds to aggression, at the profile's rate. Below both, it folds. So a calling
+    station (threshold 0.12) keeps calling with weak hands the price says to fold, and a rock
+    (threshold 0.45) lays down hands the price says to keep.
+    """
+    if to_call <= 0:
+        return 1.0
+    pot_after_call = pot_before + to_call
+    required = to_call / pot_after_call if pot_after_call else 1.0
+    if strength >= max(profile.call_threshold, required):
+        return 1.0
+    if strength >= profile.call_threshold or strength >= required:
+        return 1.0 - profile.fold_to_aggression
+    return 0.0
 
 
 class HeuristicOpponent:
@@ -55,9 +80,11 @@ class HeuristicOpponent:
         profile = self.profile
 
         # VPIP sets how deep into the strength distribution this opponent
-        # plays: a 20% VPIP means roughly the top 20% of starting hands.
-        plays_hand = strength >= (1.0 - profile.vpip) * 0.85
-        raises_hand = strength >= (1.0 - profile.pfr) * 0.90
+        # plays: a 20% VPIP means the top 20% of the 1326 starting hands.
+        # Raises are gated by aggression, so the raising band is widened to
+        # pfr / aggression to keep the overall raise rate at PFR.
+        plays_hand = strength >= preflop_cutoff(profile.vpip)
+        raises_hand = strength >= preflop_cutoff(raise_band(profile))
 
         if options.can_raise and raises_hand and rng.random() < profile.aggression:
             return self._sized_raise(state, options, rng)
@@ -113,20 +140,11 @@ class HeuristicOpponent:
         strength: float,
         rng: Random,
     ) -> bool:
-        """Compare heuristic strength against the pot odds being offered."""
+        """Compare heuristic strength against the pot odds and the profile's own threshold."""
         to_call = options.call_amount
         if to_call <= 0:
             return True
-
-        pot_after_call = state.pot_total + to_call
-        required = to_call / pot_after_call if pot_after_call else 1.0
-
-        if strength < self.profile.call_threshold:
-            # Weak hands fold at a rate set by the profile.
-            if rng.random() < self.profile.fold_to_aggression:
-                return False
-
-        return strength >= required
+        return rng.random() < defend_chance(self.profile, strength, to_call, state.pot_total)
 
     def _sized_raise(
         self, state: HandState, options: LegalActions, rng: Random

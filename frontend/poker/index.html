@@ -6,7 +6,7 @@
   <title>Poker Laboratory</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/poker/styles.css" />
+  <link rel="stylesheet" href="/poker/styles.css?v=coach1" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 </head>
@@ -21,6 +21,7 @@
     </div>
     <nav class="site-nav">
       <a href="/">Home</a>
+      <a href="/poker/learn">Learn to play</a>
       <a href="/poker/lab">Shuffle &amp; Fourier lab</a>
     </nav>
     <div class="header-stats">
@@ -33,6 +34,7 @@
 <!-- ── Sit-down screen ──────────────────────────────────────── -->
 <div class="page-wrap" id="setup-screen">
   <div class="card setup-card">
+    <a class="learn-callout" href="/poker/learn">New to poker? <strong>Learn to play first →</strong></a>
     <p class="section-title">Sit down</p>
     <h2>Heads-up No-Limit Hold'em</h2>
     <p class="muted-copy">
@@ -144,6 +146,20 @@
         <p class="hint" id="mode-live-hint"></p>
       </div>
 
+      <div class="panel" id="coach-panel" hidden>
+        <div class="panel-head">
+          <p class="section-title">Coach</p>
+          <button class="btn btn-ghost btn-tiny" id="ask-coach-btn">Ask the coach</button>
+        </div>
+        <label class="field-label" for="stop-select">Stop me</label>
+        <select id="stop-select" class="input compact">
+          <option value="every">Before every choice</option>
+          <option value="big">Only at the big moments</option>
+          <option value="mistakes">Only when I'm about to make a mistake</option>
+        </select>
+        <p class="hint" id="coach-panel-hint"></p>
+      </div>
+
       <div class="panel" id="math-panel">
         <div class="panel-head">
           <p class="section-title">Your decision</p>
@@ -167,6 +183,16 @@
   </div>
 </div>
 
-<script src="/poker/script.js"></script>
+<!-- ── The coach: stops the hand to explain ─────────────────── -->
+<div class="coach-backdrop" id="coach-backdrop" hidden>
+  <div class="coach-card" role="dialog" aria-modal="true" aria-labelledby="coach-title">
+    <p class="section-title" id="coach-kicker">Coach</p>
+    <h3 id="coach-title"></h3>
+    <div id="coach-body"></div>
+    <div class="coach-actions" id="coach-actions"></div>
+  </div>
+</div>
+
+<script src="/poker/script.js?v=coach1"></script>
 </body>
 </html>

@@ -13,12 +13,16 @@ from __future__ import annotations
 import logging
 import threading
 from collections import OrderedDict
+from random import Random
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from poker.cards import FULL_DECK
+from poker.coach import OPPONENT_LESSONS, opponent_stats
 from poker.engine import GameConfig
+from poker.evaluator import evaluate
 from poker.engine.rules import IllegalAction
 from poker.opponents import PROFILES
 from poker.session import LearningMode, PokerSession
@@ -47,7 +51,7 @@ class CreateSessionRequest(BaseModel):
     big_blind: int = Field(default=2, ge=1, le=20_000)
     starting_stack: int = Field(default=200, ge=2, le=1_000_000)
     hero_name: str = Field(default="You", max_length=40)
-    learning_mode: str = Field(default=LearningMode.BEGINNER)
+    learning_mode: str = Field(default=LearningMode.COACH)
     seed: Optional[int] = Field(default=None)
 
 
@@ -89,6 +93,32 @@ def _evict_if_needed() -> None:
 def list_opponents() -> Dict[str, List[Dict[str, Any]]]:
     """Available opponent archetypes and their behavioural parameters."""
     return {"opponents": [profile.to_dict() for profile in PROFILES.values()]}
+
+
+@router.get("/learn/opponents")
+def opponent_lessons() -> Dict[str, List[Dict[str, Any]]]:
+    """How to beat each opponent: its settings, how it really plays (measured), its leak, the plan."""
+    return {"opponents": [
+        {**profile.to_dict(), "measured": opponent_stats(key), **OPPONENT_LESSONS.get(key, {})}
+        for key, profile in PROFILES.items()
+    ]}
+
+
+@router.get("/learn/showdown")
+def showdown_quiz(seed: Optional[int] = None) -> Dict[str, Any]:
+    """A practice deal: the table cards and two hands. Which hand wins, and with what?"""
+    rng = Random(seed)
+    cards = rng.sample(list(FULL_DECK), 9)
+    board, first, second = cards[:5], cards[5:7], cards[7:9]
+    a, b = evaluate(first + board), evaluate(second + board)
+    return {
+        "board": [str(c) for c in board],
+        "hands": [
+            {"cards": [str(c) for c in first], "best": a.to_dict()},
+            {"cards": [str(c) for c in second], "best": b.to_dict()},
+        ],
+        "winner": 0 if a > b else 1 if b > a else None,
+    }
 
 
 @router.get("/learning-modes")

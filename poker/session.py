@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from random import Random
 from typing import Any, Dict, List, Optional
 
+from poker.coach import coach_decision, grade_of, hand_recap
 from poker.decision import DecisionContext, build_decision_context
 from poker.engine import (
     Action,
@@ -39,14 +40,16 @@ ENGINE_VERSION = "1.0.0-m1"
 class LearningMode:
     """How much of the mathematics the interface reveals before a decision."""
 
+    COACH = "coach"
     BEGINNER = "beginner"
     INTERMEDIATE = "intermediate"
     CHALLENGE = "challenge"
     ANALYSIS = "analysis"
 
-    ALL = (BEGINNER, INTERMEDIATE, CHALLENGE, ANALYSIS)
+    ALL = (COACH, BEGINNER, INTERMEDIATE, CHALLENGE, ANALYSIS)
 
     DESCRIPTIONS = {
+        COACH: "A coach stops you at the moments that matter and explains, in words. No formulas.",
         BEGINNER: "Show the maths while you decide.",
         INTERMEDIATE: "Hidden by default — reveal it when you want it.",
         CHALLENGE: "Decide with no assistance.",
@@ -109,7 +112,7 @@ class PokerSession:
         opponent_profile: str = "balanced",
         hero_name: str = "You",
         seed: Optional[int] = None,
-        learning_mode: str = LearningMode.BEGINNER,
+        learning_mode: str = LearningMode.COACH,
     ) -> None:
         self.session_id = session_id or str(uuid.uuid4())
         self.config = config or GameConfig()
@@ -135,6 +138,12 @@ class PokerSession:
         self.rebuys = 0
         self.last_rebuy = False
 
+        #: Coach mode: the current decision's coaching (keyed by hand and action count), the
+        #: grade of each choice made this hand, and the recap of the last finished hand.
+        self._coach_cache: Optional[tuple] = None
+        self._coach_notes: List[Dict[str, str]] = []
+        self.last_recap: Optional[Dict[str, Any]] = None
+
     # -- lifecycle --------------------------------------------------------
 
     def start_hand(self) -> "PokerSession":
@@ -150,6 +159,8 @@ class PokerSession:
             self.button_index = 1 - self.button_index
 
         self.hand_number += 1
+        self._coach_notes = []
+        self.last_recap = None
         self.engine = HandEngine(
             self.config,
             [self.hero, self.villain],
@@ -194,7 +205,13 @@ class PokerSession:
         if parsed is ActionType.POST_BLIND:
             raise ValueError("Blinds are posted automatically")
 
+        coach = self.coach()
+        street = engine.state.street.name
         engine.apply_action(Action(parsed, amount))
+        if coach is not None:
+            note = grade_of(coach, parsed.value)
+            self._coach_notes.append({"street": street, "action": parsed.value,
+                                      "grade": note["grade"], "why": note["why"]})
         self._run_opponent()
         self._record_if_complete()
         return self
@@ -240,6 +257,10 @@ class PokerSession:
                 action_log=[r.to_dict() for r in engine.state.action_log],
             )
         )
+        if self.learning_mode == LearningMode.COACH:
+            self.last_recap = hand_recap(
+                result.summary, hero_net, list(self._coach_notes),
+                [c.display for c in self.villain.hole_cards], result.went_to_showdown, self.profile)
 
     def _require_engine(self) -> HandEngine:
         if self.engine is None:
@@ -256,6 +277,20 @@ class PokerSession:
         if actor is None or not actor.is_hero:
             return None
         return build_decision_context(engine.state, actor, engine.legal_actions())
+
+    def coach(self) -> Optional[Dict[str, Any]]:
+        """The coach's view of the hero's current decision (coach mode only; cached per decision)."""
+        engine = self.engine
+        if self.learning_mode != LearningMode.COACH or engine is None or engine.is_complete:
+            return None
+        actor = engine.state.to_act
+        if actor is None or not actor.is_hero:
+            return None
+        key = (engine.state.hand_id, len(engine.state.action_log))
+        if self._coach_cache is None or self._coach_cache[0] != key:
+            self._coach_cache = (key, coach_decision(engine.state, actor, self.villain, self.profile,
+                                                     engine.legal_actions()))
+        return self._coach_cache[1]
 
     def to_dict(self) -> Dict[str, Any]:
         engine = self.engine
@@ -280,6 +315,8 @@ class PokerSession:
             "hands_played": len(self.history),
             "hand": engine.to_dict() if engine else None,
             "decision": context.to_dict() if context else None,
+            "coach": self.coach(),
+            "recap": self.last_recap,
             "awaiting_hero": bool(
                 engine
                 and not engine.is_complete

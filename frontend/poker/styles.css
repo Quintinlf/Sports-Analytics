@@ -321,6 +321,89 @@ body {
 .session-cell .v.pos { color: var(--green); }
 .session-cell .v.neg { color: var(--red); }
 
+/* ── The coach ────────────────────────────────────────────── */
+.learn-callout {
+  display: block; margin-bottom: 18px; padding: 12px 14px;
+  background: var(--surface); border: 1px solid var(--accent); border-radius: var(--radius-sm);
+  color: var(--text-dim); text-decoration: none; font-size: .9rem;
+}
+.learn-callout strong { color: var(--text-bright); }
+.coach-backdrop {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(5, 8, 12, .72);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.coach-card {
+  width: min(560px, 100%); max-height: calc(100vh - 32px); overflow-y: auto;
+  background: var(--card); border: 1px solid var(--amber); border-radius: var(--radius);
+  padding: 22px 22px 18px; box-shadow: 0 24px 60px rgba(0,0,0,.6);
+}
+.coach-card h3 { font-size: 1.15rem; color: var(--text-bright); margin: 4px 0 12px; }
+.coach-card p { font-size: .9rem; color: var(--text); margin-bottom: 8px; }
+.coach-lines { margin: 0 0 12px 18px; display: grid; gap: 6px; font-size: .9rem; }
+.coach-advice { color: var(--text-bright) !important; font-weight: 600;
+  border-left: 3px solid var(--green); padding-left: 10px; }
+.coach-tip { color: var(--amber) !important; }
+.coach-model { color: var(--muted) !important; font-size: .76rem !important; margin-top: 10px; }
+.coach-options { display: grid; gap: 8px; margin: 12px 0; }
+.coach-option { background: var(--surface); border-radius: var(--radius-sm); padding: 10px 12px; }
+.coach-option p { font-size: .84rem; color: var(--text-dim); margin: 4px 0 0; }
+.coach-option-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.grade { font-size: .72rem; font-weight: 700; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+.grade-good { background: #14532d; color: #bbf7d0; }
+.grade-ok { background: #3b3310; color: #fde68a; }
+.grade-mistake { background: #7f1d1d; color: #fecaca; }
+.coach-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.coach-actions .btn { flex: 1; min-width: 150px; }
+
+/* ── Learn to play ────────────────────────────────────────── */
+.learn-wrap { max-width: 820px; margin: 0 auto; padding: 24px 16px 80px; display: grid; gap: 18px; }
+.learn-toc { display: flex; flex-wrap: wrap; gap: 6px; }
+.learn-toc a { font-size: .78rem; color: var(--text-dim); text-decoration: none; background: var(--card);
+  border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; }
+.learn-toc a:hover { color: var(--text-bright); border-color: var(--accent); }
+.lesson { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+.lesson h2 { font-size: 1.25rem; color: var(--text-bright); margin: 4px 0 10px; }
+.lesson p, .lesson li, .lesson dd { font-size: .93rem; color: var(--text); }
+.lesson p { margin-bottom: 10px; }
+.lesson ul, .lesson ol { margin: 0 0 10px 20px; display: grid; gap: 6px; }
+.big-line { font-size: 1rem !important; color: var(--text-bright) !important; }
+.card-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.deal-demo { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px; align-items: flex-end; }
+.deal-demo .hint { flex-basis: 100%; }
+.deal-part .section-title { margin-bottom: 6px; }
+.rank-list { display: grid; gap: 8px; margin: 12px 0 18px; }
+.rank-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--surface); border-radius: var(--radius-sm); padding: 8px 12px; }
+.rank-row strong { display: block; color: var(--text-bright); font-size: .92rem; }
+.rank-row span { font-size: .8rem; color: var(--text-dim); }
+.quiz { border-top: 1px solid var(--border); padding-top: 16px; display: grid; gap: 10px; }
+.quiz .row { display: flex; gap: 10px; flex-wrap: wrap; }
+.quiz .row .btn { flex: 1; min-width: 140px; }
+.quiz-hands { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.quiz-hand { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 10px; display: grid; gap: 8px; justify-items: start; cursor: pointer; color: inherit; font: inherit; }
+.quiz-hand:hover { border-color: var(--accent); }
+.quiz-hand.won { border-color: var(--amber); }
+.best-five { display: grid; gap: 4px; }
+.quiz-feedback { font-weight: 600; min-height: 1.4em; }
+.quiz-feedback.right { color: var(--green); }
+.quiz-feedback.wrong { color: var(--red); }
+.choices { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin-bottom: 10px; }
+.choices dt { font-weight: 700; color: var(--text-bright); }
+.price-calc { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; background: var(--surface);
+  border-radius: var(--radius-sm); padding: 12px; }
+.price-calc label { font-size: .8rem; color: var(--text-dim); display: grid; gap: 4px; width: 120px; }
+.price-calc p { flex-basis: 100%; margin: 0; }
+.opponent-lesson { background: var(--surface); border-radius: var(--radius-sm); padding: 16px; margin-top: 12px; }
+.opponent-lesson h3 { color: var(--text-bright); font-size: 1.05rem; margin-bottom: 4px; }
+.opponent-lesson .btn { display: inline-block; text-decoration: none; margin-top: 6px; }
+.measured { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 10px 0 12px; }
+.measured div { background: var(--card); border-radius: var(--radius-sm); padding: 8px 10px; font-size: .78rem;
+  color: var(--text-dim); }
+.measured span { display: block; font-family: var(--mono); font-size: 1.1rem; font-weight: 700; color: var(--amber); }
+@media (max-width: 600px) { .quiz-hands { grid-template-columns: 1fr; } }
+
 /* ── Responsive ───────────────────────────────────────────── */
 @media (max-width: 1080px) {
   .layout { grid-template-columns: minmax(0, 1fr); }

@@ -14,12 +14,14 @@ number from ever being shown to the learner as if it were a probability.
 """
 from __future__ import annotations
 
+from functools import lru_cache
+from itertools import combinations
 from typing import Sequence
 
-from poker.cards import Card
+from poker.cards import FULL_DECK, Card
 from poker.evaluator import HandCategory, evaluate
 
-__all__ = ["chen_score", "preflop_strength", "postflop_strength", "hand_strength"]
+__all__ = ["chen_score", "preflop_strength", "preflop_cutoff", "postflop_strength", "hand_strength"]
 
 
 #: Chen formula high-card points.
@@ -80,6 +82,25 @@ def chen_score(hole_cards: Sequence[Card]) -> float:
 def preflop_strength(hole_cards: Sequence[Card]) -> float:
     """Normalise the Chen score into a 0-1 band."""
     return _clamp((chen_score(hole_cards) + 1.0) / 21.0)
+
+
+@lru_cache(maxsize=1)
+def _preflop_ladder() -> tuple[float, ...]:
+    return tuple(sorted(preflop_strength(list(c)) for c in combinations(FULL_DECK, 2)))
+
+
+def preflop_cutoff(top_fraction: float) -> float:
+    """The preflop strength at which a hand is in the top ``top_fraction`` of all 1326 starting hands.
+
+    The strength scale is not uniform (most hands score low), so "plays 45% of hands" has to be a
+    quantile of the real distribution, not the number 0.55 on the strength scale.
+    """
+    ladder = _preflop_ladder()
+    if top_fraction >= 1.0:
+        return ladder[0]
+    if top_fraction <= 0.0:
+        return float("inf")
+    return ladder[min(len(ladder) - 1, int((1.0 - top_fraction) * len(ladder)))]
 
 
 def postflop_strength(
